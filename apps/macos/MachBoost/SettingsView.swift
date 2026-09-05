@@ -10,19 +10,18 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            Form {
-                Section("General") {
+            VStack(alignment: .leading, spacing: 28) {
+                AppPageHeading("Settings", subtitle: "Preferences for this Mac")
+
+                settingsSection("General", symbol: "slider.horizontal.3") {
                     Toggle("Launch MachBoost at login", isOn: $launchAtLogin)
                         .accessibilityIdentifier("launch-at-login")
                         .onChange(of: launchAtLogin, updateLoginItem)
                 }
 
-                Section("Updates") {
+                settingsSection("Updates", symbol: "arrow.down.circle") {
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: updateIcon)
-                            .font(.title2)
-                            .foregroundStyle(updateColor)
-                            .frame(width: 28)
+                        AppIconTile(symbol: updateIcon, color: updateColor)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(updates.deliveryDescription)
                                 .font(.body.weight(.medium))
@@ -31,9 +30,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text("v\(version)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                        AppBadge("v\(version)")
                     }
 
                     Toggle("Check for new releases automatically", isOn: $automaticUpdates)
@@ -43,7 +40,7 @@ struct SettingsView: View {
                         }
                         .disabled(!updates.supportsAutomaticUpdates)
 
-                    HStack {
+                    AppFlowLayout(spacing: 10) {
                         Button {
                             updates.checkForUpdates()
                         } label: {
@@ -69,7 +66,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Storage") {
+                settingsSection("Storage", symbol: "internaldrive") {
                     storageRow(
                         title: "Models and cache",
                         url: FileManager.default.homeDirectoryForCurrentUser
@@ -81,7 +78,7 @@ struct SettingsView: View {
                     )
                 }
 
-                Section("Privacy") {
+                settingsSection("Privacy", symbol: "lock.shield") {
                     LabeledContent("Chat history") {
                         Text("Stored on this Mac")
                             .foregroundStyle(.secondary)
@@ -96,15 +93,31 @@ struct SettingsView: View {
                     }
                 }
             }
-            .formStyle(.grouped)
-            .padding(20)
-            .frame(maxWidth: 720)
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .font(.system(size: 13))
+            .padding(28)
+            .frame(maxWidth: 820)
             .frame(maxWidth: .infinity)
         }
+        .background(AppStyle.canvas)
+        .tint(AppStyle.accent)
         .navigationTitle("Settings")
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
             automaticUpdates = updates.automaticallyChecksForUpdates
+        }
+    }
+
+    private func settingsSection<Content: View>(
+        _ title: String, symbol: String, @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: 16, content: content)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Divider().padding(.top, 6)
         }
     }
 
@@ -121,7 +134,7 @@ struct SettingsView: View {
     }
 
     private var updateColor: Color {
-        if updates.updateAvailable { return .green }
+        if updates.updateAvailable { return AppStyle.accent }
         if updates.communityCheckFailed { return .orange }
         return .secondary
     }
@@ -151,19 +164,24 @@ struct SettingsView: View {
     }
 
     private func storageRow(title: String, url: URL) -> some View {
-        LabeledContent(title) {
-            HStack {
+        HStack(spacing: 12) {
+            AppIconTile(symbol: "folder", color: .secondary, size: 32)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
                 Text(url.path)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .help("Show in Finder")
+                    .truncationMode(.middle)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } label: {
+                Image(systemName: "arrow.up.forward")
+            }
+            .buttonStyle(AppIconButtonStyle())
+            .help("Show in Finder")
         }
     }
 
