@@ -16,7 +16,9 @@ struct AppsView: View {
             }
             .frame(maxWidth: 820, alignment: .leading)
             .padding(28)
+            .frame(maxWidth: .infinity)
         }
+        .background(AppStyle.canvas)
         .navigationTitle("Apps")
         .confirmationDialog(
             pendingAction?.title ?? "",
@@ -39,25 +41,13 @@ struct AppsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Use MachBoost Anywhere")
-                .font(.title2.weight(.semibold))
-            Text("Connect desktop agents to models running on this Mac or a shared MachBoost host.")
-                .foregroundStyle(.secondary)
-        }
+        AppPageHeading("Apps", subtitle: "Connected applications")
     }
 
     private var claudeDesktopSection: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.green.opacity(0.13))
-                    Image(systemName: "sparkles.rectangle.stack")
-                        .font(.title2)
-                        .foregroundStyle(.green)
-                }
-                .frame(width: 46, height: 46)
+                AppIconTile(symbol: "sparkles.rectangle.stack", size: 42)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Claude Desktop")
@@ -87,7 +77,7 @@ struct AppsView: View {
                     .accessibilityIdentifier("claude-desktop-toggle")
                 }
             }
-            .padding(18)
+            .padding(.vertical, 20)
 
             Divider()
 
@@ -121,11 +111,11 @@ struct AppsView: View {
                         HStack(spacing: 6) {
                             if status.relayed {
                                 Image(systemName: "lock.shield.fill")
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(AppStyle.accent)
                                     .help("Claude connects through a private localhost bridge")
                             }
                             Text(status.upstream ?? currentEndpoint)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(AppStyle.accent)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
@@ -141,13 +131,7 @@ struct AppsView: View {
                     Spacer()
                 }
             }
-            .padding(18)
-        }
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            .padding(.vertical, 20)
         }
     }
 
