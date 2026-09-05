@@ -12,6 +12,8 @@ struct ModelSearchField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = NSSearchField()
+        field.controlSize = .large
+        field.font = .systemFont(ofSize: 13)
         field.placeholderString = placeholder
         field.delegate = context.coordinator
         field.sendsSearchStringImmediately = true
@@ -56,18 +58,24 @@ struct ModelsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Models")
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Button {
-                    Task { await appState.refreshAll() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    AppPageHeading("Models", subtitle: "Your model library")
+                    Spacer()
+                    Button {
+                        Task { await appState.refreshAll() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(AppIconButtonStyle())
+                    .help("Refresh models")
                 }
-                .help("Refresh models")
+                AppFlowLayout(spacing: 8) {
+                    AppBadge("\(appState.catalog.filter(\.cached).count) downloaded", symbol: "internaldrive")
+                    AppBadge("\(appState.loadedModels.count) loaded", symbol: "memorychip", color: AppStyle.accent)
+                }
             }
-            .padding(18)
+            .padding(24)
 
             Divider()
 
@@ -78,12 +86,15 @@ struct ModelsView: View {
                         placeholder: "Search models",
                         accessibilityIdentifier: "models-page-search-field"
                     )
-                    .frame(height: 26)
+                    .frame(height: 32)
 
                     if !appState.downloads.isEmpty {
                         activeDownloadsSection
                     }
 
+                    if !downloadedModels.isEmpty {
+                        modelSection(title: "Downloaded", models: downloadedModels)
+                    }
                     if !recommendedModels.isEmpty {
                         modelSection(title: "Recommended", models: recommendedModels)
                     }
@@ -103,11 +114,12 @@ struct ModelsView: View {
                     }
                     advancedSection
                 }
-                .padding(20)
-                .frame(maxWidth: 920, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: 1000, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
         }
+        .background(AppStyle.canvas)
         .confirmationDialog(
             "Download model?",
             isPresented: Binding(
@@ -183,9 +195,15 @@ struct ModelsView: View {
     @ViewBuilder
     private func modelSection(title: String, models: [CatalogModel]) -> some View {
         if !models.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.headline)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("\(models.count)")
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.bottom, 12)
                 ForEach(models) { model in
                     ModelRow(
                         model: model,
@@ -205,6 +223,9 @@ struct ModelsView: View {
                         },
                         onDelete: { pendingDeletion = model }
                     )
+                    if model.id != models.last?.id {
+                        Divider().padding(.leading, 56)
+                    }
                 }
             }
         }
@@ -243,12 +264,16 @@ struct ModelsView: View {
         }
     }
 
+    private var downloadedModels: [CatalogModel] {
+        filteredModels.filter { $0.cached && appState.downloads[$0.name] == nil }
+    }
+
     private var recommendedModels: [CatalogModel] {
-        filteredModels.filter { $0.recommended && appState.downloads[$0.name] == nil }
+        filteredModels.filter { !$0.cached && $0.recommended && appState.downloads[$0.name] == nil }
     }
 
     private var remainingModels: [CatalogModel] {
-        filteredModels.filter { !$0.recommended && appState.downloads[$0.name] == nil }
+        filteredModels.filter { !$0.cached && !$0.recommended && appState.downloads[$0.name] == nil }
     }
 
     private var filteredHubModels: [CatalogModel] {
@@ -321,43 +346,45 @@ private struct ModelRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(
-                systemName: model.supportsReasoning
+        HStack(alignment: .top, spacing: 14) {
+            AppIconTile(
+                symbol: model.supportsReasoning
                     ? "brain.fill"
-                    : model.supportsVision ? "eye.fill" : "text.bubble.fill"
+                    : model.supportsVision ? "eye.fill" : "text.bubble.fill",
+                color: model.supportsVision ? .teal : AppStyle.accent,
+                size: 38
             )
-                .font(.title3)
-                .foregroundStyle(model.supportsReasoning ? Color.green : model.supportsVision ? Color.indigo : Color.teal)
-                .frame(width: 28)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
+                AppFlowLayout(spacing: 8, rowSpacing: 5) {
                     Text(model.displayName)
-                        .font(.body.weight(.medium))
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(2)
                     if loaded {
-                        Label("Loaded", systemImage: "memorychip.fill")
-                            .foregroundStyle(.green)
+                        AppBadge("Loaded", symbol: "memorychip.fill", color: AppStyle.accent)
                     } else if model.support == "missing_runtime" {
-                        Label("Runtime unavailable", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        AppBadge("Runtime unavailable", symbol: "exclamationmark.triangle", color: .orange)
                     } else if model.support == "unsupported" {
-                        Label("Architecture unsupported", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        AppBadge("Architecture unsupported", symbol: "exclamationmark.triangle", color: .orange)
                     } else if !model.tested {
-                        Label("Verify before download", systemImage: "checkmark.shield")
-                            .foregroundStyle(.secondary)
+                        AppBadge("Verify before download", symbol: "checkmark.shield")
                     } else if model.cached {
-                        Label("Downloaded", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                        AppBadge("Downloaded", symbol: "checkmark.circle")
                     }
                 }
-                HStack(spacing: 10) {
-                    Text(model.name)
-                    Text(model.backend.uppercased())
+                Text(model.name)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                AppFlowLayout(spacing: 5, rowSpacing: 4) {
+                    AppBadge(model.backend.uppercased(), color: .teal)
                     ForEach(model.capabilities, id: \.self) { capability in
-                        Text(capability.capitalized)
+                        AppBadge(capability.capitalized)
                     }
+                }
+                AppFlowLayout(spacing: 12, rowSpacing: 4) {
                     if let size = model.diskSizeGB {
                         Text("\(size.formatted(.number.precision(.fractionLength(2)))) GB on disk")
                     } else if let size = model.downloadSizeGB {
@@ -390,8 +417,6 @@ private struct ModelRow: View {
                     ModelDownloadProgress(event: download)
                 }
             }
-
-            Spacer()
 
             if loading || deleting {
                 ProgressView()
@@ -441,13 +466,9 @@ private struct ModelRow: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 1)
-        }
+        .buttonStyle(AppIconButtonStyle())
+        .padding(.vertical, 16)
+        .padding(.horizontal, 4)
     }
 
     private var deleteButton: some View {
@@ -466,30 +487,29 @@ private struct ActiveDownloadRow: View {
     let onCancel: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.green)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: .top, spacing: 14) {
+            AppIconTile(symbol: "arrow.down", size: 38)
+            VStack(alignment: .leading, spacing: 10) {
                 Text(model)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 13, weight: .medium))
                     .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 ModelDownloadProgress(event: event)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: onCancel) {
                 Image(systemName: "xmark")
             }
+            .buttonStyle(AppIconButtonStyle())
             .accessibilityLabel("Cancel download for \(model)")
             .help("Cancel download")
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(16)
+        .background(AppStyle.surface, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppStyle.accent.opacity(0.25), lineWidth: 1)
         }
     }
 }
@@ -511,7 +531,7 @@ private struct ModelDownloadProgress: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            HStack(spacing: 10) {
+            AppFlowLayout(spacing: 10, rowSpacing: 4) {
                 if let filesCompleted = event.filesCompleted,
                    let filesTotal = event.filesTotal,
                    filesTotal > 0 {
