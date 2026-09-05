@@ -37,17 +37,8 @@ struct ServerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Server")
-                    .font(.title2.weight(.semibold))
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 560)
+            HStack(spacing: 12) {
+                AppPageHeading("Server", subtitle: "Inference and API activity")
                 Spacer()
                 statusLabel
                 Button {
@@ -59,19 +50,40 @@ struct ServerView: View {
                         }
                     }
                 } label: {
-                    Label(
-                        appState.serverIsRunning ? "Pause" : "Resume",
-                        systemImage: appState.serverIsRunning ? "pause.fill" : "play.fill"
-                    )
+                    Image(systemName: appState.serverIsRunning ? "pause.fill" : "play.fill")
                 }
+                .buttonStyle(AppIconButtonStyle(selected: appState.serverIsRunning))
+                .help(appState.serverIsRunning ? "Pause server" : "Resume server")
                 Button {
                     Task { await appState.refreshMetrics() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                .buttonStyle(AppIconButtonStyle())
                 .help("Refresh server")
             }
-            .padding(18)
+            .padding(24)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 24) {
+                    ForEach(Mode.allCases) { tab in
+                        Button { mode = tab } label: {
+                            VStack(spacing: 12) {
+                                Text(tab.rawValue)
+                                    .font(.system(size: 12, weight: mode == tab ? .semibold : .medium))
+                                    .foregroundStyle(mode == tab ? AppStyle.accent : .secondary)
+                                Rectangle()
+                                    .fill(mode == tab ? AppStyle.accent : .clear)
+                                    .frame(height: 2)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(mode == tab ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
 
             Divider()
 
@@ -90,11 +102,12 @@ struct ServerView: View {
                         logsAndEvaluations
                     }
                 }
-                .padding(20)
-                .frame(maxWidth: 960, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: 1080, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
         }
+        .background(AppStyle.canvas)
         .onAppear {
             draftConfiguration = appState.configuration
             syncTeamSettings()
@@ -119,7 +132,7 @@ struct ServerView: View {
     private var statusLabel: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(appState.serverIsRunning ? Color.green : Color.red)
+                .fill(appState.serverIsRunning ? AppStyle.accent : Color.red)
                 .frame(width: 8, height: 8)
             Text(appState.serverIsRunning ? "Running" : "Stopped")
                 .font(.caption.weight(.medium))
@@ -127,7 +140,7 @@ struct ServerView: View {
     }
 
     private var overview: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 24) {
             metricsGrid
             modelLoader
 
@@ -174,8 +187,7 @@ struct ServerView: View {
     }
 
     private var metricsGrid: some View {
-        Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-            GridRow {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16)], spacing: 16) {
                 MetricTile(
                     title: "Active",
                     value: "\(appState.metrics?.scheduler.activeRequests ?? 0)",
@@ -191,8 +203,6 @@ struct ServerView: View {
                     value: "\((appState.metrics?.operations.generationTokensPerSecond ?? 0).formatted(.number.precision(.fractionLength(1)))) tok/s",
                     systemImage: "gauge.medium"
                 )
-            }
-            GridRow {
                 MetricTile(
                     title: "P50 latency",
                     value: formatLatency(appState.metrics?.operations.latencySeconds.p50 ?? 0),
@@ -208,19 +218,20 @@ struct ServerView: View {
                     value: formatBytes(appState.metrics?.process.peakResidentMemoryBytes ?? 0),
                     systemImage: "memorychip"
                 )
-            }
         }
     }
 
     private func residentModel(_ model: ModelInstance) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: model.capabilities.contains("vision") ? "eye.fill" : "text.bubble.fill")
-                .foregroundStyle(model.capabilities.contains("vision") ? Color.indigo : Color.teal)
-                .frame(width: 24)
+            AppIconTile(
+                symbol: model.capabilities.contains("vision") ? "eye" : "text.bubble",
+                color: model.capabilities.contains("vision") ? .teal : AppStyle.accent
+            )
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.model)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 Text("\(model.backend.uppercased()) · \(model.scheduler.replicas) replica(s) · \(model.requests) requests")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -236,11 +247,12 @@ struct ServerView: View {
             } label: {
                 Image(systemName: "eject")
             }
+            .buttonStyle(AppIconButtonStyle())
             .help("Unload model")
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(14)
+        .background(AppStyle.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppStyle.line, lineWidth: 1))
     }
 
     private var serverConfiguration: some View {
@@ -1205,13 +1217,11 @@ private struct MetricTile: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .foregroundStyle(.teal)
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 12) {
+            AppIconTile(symbol: systemImage, color: .teal, size: 34)
+            VStack(alignment: .leading, spacing: 6) {
                 Text(value)
-                    .font(.headline.monospacedDigit())
+                    .font(.system(size: 19, weight: .medium).monospacedDigit())
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(title)
@@ -1220,10 +1230,10 @@ private struct MetricTile: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(12)
-        .frame(minWidth: 150, minHeight: 64)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 84)
+        .background(AppStyle.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppStyle.line, lineWidth: 1))
     }
 }
 
@@ -1232,13 +1242,7 @@ private struct ProtocolBadge: View {
     let systemImage: String
 
     var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.green)
-            .padding(.horizontal, 9)
-            .frame(height: 28)
-            .background(Color.green.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        AppBadge(title, symbol: systemImage, color: AppStyle.accent)
     }
 }
 
@@ -1249,7 +1253,7 @@ private struct ReadinessItem: View {
     var body: some View {
         Label(title, systemImage: ready ? "checkmark.circle.fill" : "circle")
             .font(.callout.weight(.medium))
-            .foregroundStyle(ready ? Color.green : Color.secondary)
+            .foregroundStyle(ready ? AppStyle.accent : Color.secondary)
     }
 }
 
