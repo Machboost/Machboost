@@ -188,26 +188,23 @@ struct ChatView: View {
 
     private var responsiveChatSurface: some View {
         GeometryReader { geometry in
-            if showsWorkspaceChanges, geometry.size.width < 880 {
-                workspaceChangesPanel
-                    .transition(.move(edge: .trailing))
-            } else {
-                HStack(spacing: 0) {
-                    chatSurface
-                        .frame(minWidth: 0, maxWidth: .infinity)
+            HStack(spacing: 0) {
+                chatSurface
+                    .frame(minWidth: 0, maxWidth: .infinity)
 
-                    if showsWorkspaceChanges {
-                        Divider()
-                        workspaceChangesPanel
-                            .frame(
-                                width: min(
-                                    440,
-                                    max(320, geometry.size.width * 0.32)
-                                )
-                            )
-                            .transition(.move(edge: .trailing))
-                    }
+                if showsWorkspaceChanges, geometry.size.width >= 920 {
+                    Divider()
+                    workspaceChangesPanel
+                        .frame(width: min(400, geometry.size.width * 0.36))
+                        .transition(.move(edge: .trailing))
                 }
+            }
+            .sheet(isPresented: Binding(
+                get: { showsWorkspaceChanges && geometry.size.width < 920 },
+                set: { if !$0 { showsWorkspaceChanges = false } }
+            )) {
+                workspaceChangesPanel
+                    .frame(width: 560, height: 620)
             }
         }
         .animation(.easeInOut(duration: 0.18), value: showsWorkspaceChanges)
@@ -237,32 +234,27 @@ struct ChatView: View {
             header
             Divider()
             messageList
-            Divider()
             contextStrip
             composer
         }
+        .background(AppStyle.canvas)
     }
 
     private var header: some View {
         GeometryReader { geometry in
-            let compact = geometry.size.width < 780
-            let narrow = geometry.size.width < 590
+            let compact = geometry.size.width < 980
+            let narrow = geometry.size.width < 640
             HStack(spacing: compact ? 8 : 12) {
                 Button {
                     showsModelBrowser.toggle()
                 } label: {
                     HStack(spacing: 9) {
-                        Image(systemName: modelIcon(selectedModel))
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.green)
-                            .frame(width: 28, height: 28)
-                            .background(Color.green.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        AppIconTile(symbol: modelIcon(selectedModel), size: 32)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(selectedModel?.displayName ?? conversation.model)
-                                .font(.body.weight(.semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(1)
-                            if !compact, let selectedModel {
+                            if let selectedModel {
                                 Text(modelSubtitle(selectedModel))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -276,24 +268,19 @@ struct ChatView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 7)
+                .buttonStyle(AppRowButtonStyle(selected: showsModelBrowser))
+                .padding(.horizontal, 8)
                 .frame(
-                    width: narrow ? 190 : (compact ? 250 : min(330, geometry.size.width * 0.38)),
-                    height: 40
+                    width: narrow ? min(220, geometry.size.width * 0.48) : (compact ? 270 : 320),
+                    height: 48
                 )
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                }
                 .accessibilityIdentifier("chat-model-picker")
                 .popover(isPresented: $showsModelBrowser, arrowEdge: .bottom) {
                     modelBrowser
                 }
 
                 workspaceMenu(compact: narrow)
+                    .frame(maxWidth: narrow ? 34 : 150)
 
                 if codingSessionAvailable {
                     Button {
@@ -305,7 +292,7 @@ struct ChatView: View {
                         Image(systemName: "sidebar.trailing")
                             .foregroundStyle(showsWorkspaceChanges ? Color.green : Color.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(AppIconButtonStyle(selected: showsWorkspaceChanges))
                     .accessibilityLabel("Workspace changes")
                     .accessibilityIdentifier("workspace-changes-toggle")
                     .help("Show workspace changes")
@@ -314,6 +301,7 @@ struct ChatView: View {
                 Spacer(minLength: 0)
 
                 inferenceHostMenu(compact: compact)
+                    .frame(maxWidth: compact ? 34 : 170)
 
                 routeMenu(compact: compact)
 
@@ -322,7 +310,7 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(AppIconButtonStyle(selected: showsGenerationControls))
                 .accessibilityLabel("Generation controls")
                 .help("Generation controls")
                 .popover(isPresented: $showsGenerationControls, arrowEdge: .bottom) {
@@ -337,26 +325,31 @@ struct ChatView: View {
                     Label("Preparing Dev mode", systemImage: "bolt.horizontal.circle")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.green)
-                } else if !compact, let activeRequestID {
-                    Text(activeRequestID.suffix(8))
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, compact ? 10 : 16)
         }
-        .frame(height: 52)
+        .frame(height: 64)
+        .background(AppStyle.canvas)
     }
 
     private var modelBrowser: some View {
         VStack(spacing: 0) {
+            HStack {
+                Text("Choose a model")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                AppBadge("\(browsableModels.count) models")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
             HStack(spacing: 8) {
                 ModelSearchField(
                     text: $modelSearch,
                     placeholder: "Search models",
                     accessibilityIdentifier: "model-search-field"
                 )
-                .frame(height: 24)
+                .frame(height: 30)
                 if isSearchingHub {
                     ProgressView()
                         .controlSize(.small)
@@ -367,11 +360,11 @@ struct ChatView: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(AppIconButtonStyle())
                     .help("Refresh model catalog")
                 }
             }
-            .padding(12)
+            .padding(14)
 
             Picker("Model filter", selection: $modelFilter) {
                 ForEach(ModelBrowserFilter.allCases) { filter in
@@ -390,13 +383,12 @@ struct ChatView: View {
                     .frame(maxWidth: .infinity, minHeight: 260)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(spacing: 4) {
                         ForEach(browsableModels) { model in
                             modelBrowserRow(model)
-                            Divider()
-                                .padding(.leading, 54)
                         }
                     }
+                    .padding(8)
                 }
             }
 
@@ -409,14 +401,15 @@ struct ChatView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 Spacer()
-                Text(hubModels.isEmpty ? "MLX native models" : "MLX native + Hugging Face")
+                Text(hubModels.isEmpty ? "MLX" : "Hugging Face")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.green)
             }
             .padding(.horizontal, 12)
             .frame(height: 38)
         }
-        .frame(width: 500, height: 470)
+        .frame(width: 480, height: 520)
+        .background(AppStyle.canvas)
     }
 
     private func modelBrowserRow(_ model: CatalogModel) -> some View {
@@ -438,12 +431,11 @@ struct ChatView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: modelIcon(model))
-                    .font(.title3)
-                    .foregroundStyle(model.supportsReasoning ? Color.green : Color.accentColor)
-                    .frame(width: 30, height: 30)
-                    .background(Color.green.opacity(selected ? 0.18 : 0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                AppIconTile(
+                    symbol: modelIcon(model),
+                    color: model.supportsVision ? .teal : AppStyle.accent,
+                    size: 36
+                )
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
@@ -460,12 +452,12 @@ struct ChatView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    HStack(spacing: 8) {
+                    AppFlowLayout(spacing: 5, rowSpacing: 4) {
                         ForEach(model.capabilities, id: \.self) { capability in
-                            Text(capability.capitalized)
+                            AppBadge(capability.capitalized)
                         }
                         if let contextLength = model.contextLength {
-                            Text("\(contextLength.formatted()) ctx")
+                            AppBadge("\(contextLength.formatted()) ctx", color: .teal)
                         }
                     }
                     .font(.caption2)
@@ -513,10 +505,9 @@ struct ChatView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(selected ? Color.green.opacity(0.08) : Color.clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AppRowButtonStyle(selected: selected))
         .accessibilityLabel("\(model.displayName), \(model.cached ? "ready" : "download")")
     }
 
@@ -595,7 +586,7 @@ struct ChatView: View {
         .menuStyle(.borderlessButton)
         .accessibilityLabel("Repository picker")
         .accessibilityIdentifier("repository-picker")
-        .fixedSize(horizontal: true, vertical: false)
+        .frame(minWidth: 0)
         .help(workspaceHelp)
     }
 
@@ -852,12 +843,24 @@ struct ChatView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if messages.isEmpty {
-                        ContentUnavailableView(
-                            "Start a conversation",
-                            systemImage: "bubble.left.and.text.bubble.right",
-                            description: Text(conversation.model)
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 360)
+                        VStack(spacing: 16) {
+                            Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 64, height: 64)
+                                .accessibilityHidden(true)
+                            Text("What are we working on?")
+                                .font(.system(size: 25, weight: .medium))
+                            Text(selectedModel?.displayName ?? conversation.model)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            if let workspace = selectedWorkspace {
+                                AppBadge(workspace.name, symbol: "folder", color: AppStyle.accent)
+                            }
+                        }
+                        .padding(28)
+                        .frame(maxWidth: .infinity, minHeight: 340)
                     } else {
                         ForEach(messages, id: \.id) { message in
                             MessageRow(
@@ -883,7 +886,7 @@ struct ChatView: View {
                 }
                 .padding(.vertical, 10)
             }
-            .defaultScrollAnchor(.bottom)
+            .defaultScrollAnchor(messages.isEmpty ? .top : .bottom)
             .onAppear {
                 proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
             }
@@ -961,30 +964,15 @@ struct ChatView: View {
     }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .bottom, spacing: 8) {
-                Button {
-                    isImporting = true
-                } label: {
-                    Image(systemName: "paperclip")
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Attach files")
-                .help("Attach text, code, folder, or image")
-
-                TextField("Message MachBoost", text: $draft, axis: .vertical)
+        VStack(alignment: .leading, spacing: 0) {
+            TextField("Message MachBoost", text: $draft, axis: .vertical)
                     .focused($composerIsFocused)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...8)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                    }
+                    .font(AppStyle.prose)
+                    .lineLimit(2...8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
                     .onSubmit {
                         guard !isGenerating else { return }
                         send()
@@ -995,16 +983,40 @@ struct ChatView: View {
                         }
                     }
 
+            HStack(alignment: .bottom, spacing: 10) {
+                Button {
+                    isImporting = true
+                } label: {
+                    Image(systemName: "paperclip")
+                }
+                .buttonStyle(AppIconButtonStyle())
+                .accessibilityLabel("Attach files")
+                .help("Attach text, code, folder, or image")
+
+                AppFlowLayout(spacing: 10, rowSpacing: 6) {
+                    developerModeButton
+                    if appState.mcpServers.contains(where: \.enabled) {
+                        extensionToolsButton
+                    }
+                    if selectedWorkspace != nil, !codingSessionAvailable {
+                        repositoryContextButton
+                    }
+                    if codingSessionAvailable {
+                        permissionMenu
+                    }
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 Group {
                     if isGenerating {
                         Button {
                             stop()
                         } label: {
                             Image(systemName: "stop.fill")
-                                .frame(width: 28, height: 28)
+                                .frame(width: 32, height: 32)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.red)
+                        .buttonStyle(AppIconButtonStyle(selected: true))
                         .accessibilityLabel("Stop generation")
                         .accessibilityIdentifier("stop-generation")
                         .help("Stop generation")
@@ -1014,9 +1026,9 @@ struct ChatView: View {
                             send()
                         } label: {
                             Image(systemName: "arrow.up")
-                                .frame(width: 28, height: 28)
+                                .frame(width: 32, height: 32)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(AppIconButtonStyle(prominent: true))
                         .disabled(
                             draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         )
@@ -1025,41 +1037,23 @@ struct ChatView: View {
                         .keyboardShortcut(.return, modifiers: .command)
                     }
                 }
-                .frame(width: 52, height: 36)
+                .frame(width: 34, height: 34)
             }
-
-            HStack(spacing: 8) {
-                developerModeButton
-                if appState.mcpServers.contains(where: \.enabled) {
-                    Divider()
-                        .frame(height: 14)
-                    extensionToolsButton
-                }
-                if selectedWorkspace != nil, !codingSessionAvailable {
-                    Divider()
-                        .frame(height: 14)
-                    repositoryContextButton
-                }
-                if codingSessionAvailable {
-                    Divider()
-                        .frame(height: 14)
-                    permissionMenu
-                }
-                Spacer()
-                if let selectedWorkspace {
-                    Label(selectedWorkspace.name, systemImage: "folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.leading, 36)
-            .padding(.trailing, 52)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .frame(maxWidth: 980)
+        .background(AppStyle.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(composerIsFocused ? AppStyle.accent.opacity(0.5) : AppStyle.line, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.05), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
+        .padding(.bottom, 18)
+        .frame(maxWidth: 900)
         .frame(maxWidth: .infinity)
+        .background(AppStyle.canvas)
     }
 
     private var developerModeButton: some View {
@@ -1080,7 +1074,7 @@ struct ChatView: View {
         } label: {
             Label("Dev mode", systemImage: "terminal")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(codingSessionAvailable ? Color.green : Color.secondary)
+                .foregroundStyle(codingSessionAvailable ? AppStyle.accent : Color.secondary)
         }
         .buttonStyle(.borderless)
         .fixedSize()
@@ -1099,7 +1093,7 @@ struct ChatView: View {
         } label: {
             Label("Tools", systemImage: "wrench.and.screwdriver")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(extensionToolsEnabled ? Color.green : Color.secondary)
+                .foregroundStyle(extensionToolsEnabled ? Color.teal : Color.secondary)
         }
         .buttonStyle(.borderless)
         .fixedSize()
@@ -1114,7 +1108,7 @@ struct ChatView: View {
         } label: {
             Label("Repo context", systemImage: "text.magnifyingglass")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(repositoryContextEnabled ? Color.green : Color.secondary)
+                .foregroundStyle(repositoryContextEnabled ? Color.teal : Color.secondary)
         }
         .buttonStyle(.borderless)
         .fixedSize()
@@ -2457,15 +2451,18 @@ private struct MessageRow: View {
     let onRegenerate: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: message.role == .user ? "person.crop.circle.fill" : "bolt.fill")
-                .foregroundStyle(message.role == .user ? Color.secondary : Color.teal)
-                .frame(width: 24)
+        HStack(alignment: .top, spacing: 12) {
+            AppIconTile(
+                symbol: message.role == .user ? "person" : "bolt.fill",
+                color: message.role == .user ? .secondary : AppStyle.accent,
+                size: 28
+            )
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(message.role == .user ? "You" : "MachBoost")
-                        .font(.caption.weight(.semibold))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
                     Spacer()
                     messageActions
                 }
@@ -2492,12 +2489,12 @@ private struct MessageRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 22)
-        .padding(.vertical, 16)
-        .frame(maxWidth: 980, alignment: .leading)
+        .padding(.vertical, 20)
+        .frame(maxWidth: 900, alignment: .leading)
         .frame(maxWidth: .infinity)
         .background(
             message.role == .user
-                ? Color(nsColor: .controlBackgroundColor).opacity(0.55)
+                ? AppStyle.surface.opacity(0.5)
                 : Color.clear
         )
         .contextMenu {
@@ -2517,7 +2514,7 @@ private struct MessageRow: View {
                 Image(systemName: "doc.on.doc")
                     .frame(width: 28, height: 28)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(AppIconButtonStyle())
             .accessibilityLabel("Copy message")
             .help("Copy message")
             if message.role == .user {
@@ -2525,7 +2522,7 @@ private struct MessageRow: View {
                     Image(systemName: "pencil")
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .accessibilityLabel("Edit and resend")
                 .help("Edit and resend")
             }
@@ -2534,7 +2531,7 @@ private struct MessageRow: View {
                     Image(systemName: "arrow.clockwise")
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .accessibilityLabel("Regenerate response")
                 .accessibilityIdentifier("regenerate-response")
                 .help("Regenerate")
@@ -2601,7 +2598,7 @@ private struct MessageRow: View {
     }
 
     private var stats: some View {
-        HStack(spacing: 10) {
+        AppFlowLayout(spacing: 12, rowSpacing: 5) {
             if let hostName = message.inferenceHostName {
                 Label(
                     hostName,
@@ -2652,8 +2649,9 @@ private struct MessageRow: View {
                 Text("Stopped")
             }
         }
-        .font(.caption)
+        .font(.system(size: 10).monospacedDigit())
         .foregroundStyle(.secondary)
+        .padding(.top, 6)
     }
 
     private var ttftHelp: String {
@@ -2756,10 +2754,13 @@ private struct MessageRow: View {
                     }
                 }
                 .accessibilityIdentifier("tool-call-\(activity.call.function.name)")
-                .padding(10)
+                .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(AppStyle.surface, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(AppStyle.line.opacity(0.65), lineWidth: 1)
+                }
             }
             if activities.contains(where: { $0.changedPath != nil && $0.changePatch != nil }) {
                 codeChanges(activities)
@@ -2939,19 +2940,30 @@ private struct StreamingReasoningDisclosure: View {
                     if isActive {
                         ProgressView()
                             .controlSize(.mini)
+                    } else {
+                        Image(systemName: "sparkle")
+                            .foregroundStyle(.secondary)
                     }
                     Text(isActive ? "Reasoning…" : "Reasoning")
+                        .font(.system(size: 12, weight: .medium))
                     Spacer()
                 }
+                .padding(.vertical, 7)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             if isExpanded {
                 MessageContentView(content: reasoning)
-                    .padding(.top, 6)
-                    .padding(.leading, 19)
                     .foregroundStyle(.secondary)
+                    .padding(.leading, 16)
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(isActive ? AppStyle.accent.opacity(0.6) : AppStyle.line)
+                            .frame(width: 2)
+                    }
+                    .padding(.leading, 5)
             }
         }
         .font(.callout)
