@@ -9,24 +9,42 @@ struct ConnectionsView: View {
     @State private var isConnecting = false
     @State private var pendingNearbyHost: DiscoveredMachBoostHost?
     @State private var reconnectingHost: TeamHostProfile?
+    @State private var showsAddressConnection = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 30) {
                 header
                 inferencePool
                 connectedClients
                 availableDevices
-                advancedConnection
                 if appState.inferenceMode == .team, !appState.teamCatalog.isEmpty {
                     remoteModels
                 }
             }
-            .padding(24)
+            .padding(28)
             .frame(maxWidth: 1120, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(AppStyle.canvas)
         .navigationTitle("Connections")
+        .sheet(isPresented: $showsAddressConnection) {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack {
+                    AppPageHeading("Connect a device")
+                    Spacer()
+                    Button { showsAddressConnection = false } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(AppIconButtonStyle())
+                    .help("Close connection")
+                }
+                advancedConnection
+            }
+            .padding(28)
+            .frame(width: 460)
+            .background(AppStyle.canvas)
+        }
         .sheet(item: $pendingNearbyHost) { host in
             HostConnectionSheet(
                 name: host.name,
@@ -75,43 +93,42 @@ struct ConnectionsView: View {
                 connectionHeader
                 Spacer(minLength: 16)
                 connectionBadge
+                connectDeviceButton
             }
             VStack(alignment: .leading, spacing: 12) {
                 connectionHeader
                 connectionBadge
+                connectDeviceButton
             }
         }
     }
 
     private var connectionHeader: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.title2)
-                .foregroundStyle(.green)
-                .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Inference devices")
-                    .font(.title2.weight(.semibold))
-                Text("Use this Mac, connect to another Mac, or let the pool route around busy hosts.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        AppPageHeading("Connections", subtitle: "Your inference network")
+    }
+
+    private var connectDeviceButton: some View {
+        Button { showsAddressConnection = true } label: {
+            Label("Connect device", systemImage: "plus")
         }
+        .buttonStyle(.borderedProminent)
+        .tint(AppStyle.accent)
+        .controlSize(.large)
     }
 
     private var inferencePool: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                sectionTitle("Your inference pool", systemImage: "point.3.filled.connected.trianglepath.dotted")
-                Spacer()
-                Toggle("Use this Mac as backup", isOn: includeLocalBinding)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .help("Route work here when connected devices are busy")
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    sectionTitle("Inference pool", systemImage: "point.3.filled.connected.trianglepath.dotted")
+                    Spacer(minLength: 20)
+                    localBackupToggle
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    sectionTitle("Inference pool", systemImage: "point.3.filled.connected.trianglepath.dotted")
+                    localBackupToggle
+                }
             }
-            Text("Every request is sent to the ready device with the lowest expected completion time. Live latency, queues, replicas, and model residency are refreshed automatically.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
 
             if let delay = appState.lastRouteExpectedDelay {
                 Label(
@@ -122,21 +139,25 @@ struct ConnectionsView: View {
                 .foregroundStyle(.green)
             }
 
-            ScrollView(.horizontal) {
-                HStack(alignment: .center, spacing: 10) {
-                    localHostNode
-                    ForEach(appState.teamHosts) { host in
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        remoteHostNode(host)
-                    }
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 280), spacing: 14)],
+                alignment: .leading,
+                spacing: 14
+            ) {
+                localHostNode
+                ForEach(appState.teamHosts) { host in
+                    remoteHostNode(host)
                 }
-                .padding(.vertical, 2)
             }
-            .scrollIndicators(.hidden)
         }
+    }
+
+    private var localBackupToggle: some View {
+        Toggle("Use this Mac as backup", isOn: includeLocalBinding)
+            .font(.caption)
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Route work here when connected devices are busy")
     }
 
     @ViewBuilder
@@ -223,11 +244,11 @@ struct ConnectionsView: View {
         }
         .padding(14)
         .frame(minHeight: 112, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(AppStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                .stroke(AppStyle.line, lineWidth: 1)
         }
     }
 
@@ -296,17 +317,17 @@ struct ConnectionsView: View {
         reconnectAction: (() -> Void)?,
         removeAction: (() -> Void)?
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 9) {
-                Image(systemName: "desktopcomputer")
-                    .foregroundStyle(selected ? Color.green : Color.secondary)
-                    .frame(width: 28, height: 28)
-                    .background(selected ? Color.green.opacity(0.12) : Color.secondary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                AppIconTile(
+                    symbol: subtitle == "This Mac" ? "laptopcomputer" : "desktopcomputer",
+                    color: selected ? AppStyle.accent : .secondary,
+                    size: 38
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(2)
                     HStack(spacing: 5) {
                         statusIndicator(active: online)
                         Text(subtitle)
@@ -317,13 +338,13 @@ struct ConnectionsView: View {
                 }
                 Spacer(minLength: 4)
                 if selected {
-                    Text("LAST ROUTE")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.green)
+                    Image(systemName: "bolt.fill")
+                        .foregroundStyle(AppStyle.accent)
+                        .help("Handled the last request")
                 }
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: 10) {
                 compactMetric("Active", value: active)
                 compactMetric("Queued", value: queued)
                 compactMetric("Ready", value: models)
@@ -332,6 +353,9 @@ struct ConnectionsView: View {
                     compactLatency(latency)
                 }
             }
+            .padding(.vertical, 2)
+
+            Divider()
 
             HStack {
                 if let reconnectAction {
@@ -349,7 +373,7 @@ struct ConnectionsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 } else {
-                    Text(selected ? "Handled the last request" : "Available to auto-route")
+                    Text(selected ? "Active route" : online ? "Ready for requests" : "Waiting for device")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -358,18 +382,18 @@ struct ConnectionsView: View {
                     Button(role: .destructive, action: removeAction) {
                         Image(systemName: "trash")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(AppIconButtonStyle())
                     .help("Forget device")
                 }
             }
         }
-        .padding(14)
-        .frame(width: 300, height: 146, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+        .background(AppStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .stroke(selected ? Color.green.opacity(0.7) : Color(nsColor: .separatorColor), lineWidth: 1)
+                .stroke(selected ? AppStyle.accent.opacity(0.55) : AppStyle.line, lineWidth: 1)
         }
     }
 
@@ -385,9 +409,23 @@ struct ConnectionsView: View {
             }
 
             if nearbyHosts.isEmpty {
-                Text("No other MachBoost devices found yet. LAN access must be enabled on the host. This Mac is intentionally hidden from this list.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    AppIconTile(symbol: "wifi", color: .secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("No new devices nearby")
+                            .font(.callout.weight(.medium))
+                        Text("You can also connect by address.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { showsAddressConnection = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(AppIconButtonStyle())
+                    .help("Connect by address")
+                }
+                .padding(.vertical, 14)
             } else {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 250, maximum: 360), spacing: 12)],
@@ -426,11 +464,11 @@ struct ConnectionsView: View {
                             .tint(.green)
                         }
                         .padding(14)
-                        .background(Color(nsColor: .controlBackgroundColor))
+                        .background(AppStyle.surface)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay {
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                                .stroke(AppStyle.line, lineWidth: 1)
                         }
                     }
                 }
@@ -439,18 +477,23 @@ struct ConnectionsView: View {
     }
 
     private var advancedConnection: some View {
-        DisclosureGroup("Connect by address") {
+        Group {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Use this when the device does not appear automatically.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Host address")
+                    .font(.caption.weight(.medium))
                 TextField("192.168.1.20:11435", text: $endpoint)
                     .textFieldStyle(.roundedBorder)
+                    .controlSize(.large)
+                Text("API key")
+                    .font(.caption.weight(.medium))
                 SecureField("API key from the host", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
+                    .controlSize(.large)
                 HStack {
                     Button {
-                        connect(endpoint: endpoint, token: apiKey)
+                        connect(endpoint: endpoint, token: apiKey) {
+                            showsAddressConnection = false
+                        }
                     } label: {
                         if isConnecting {
                             ProgressView().controlSize(.small)
@@ -465,14 +508,12 @@ struct ConnectionsView: View {
                             || apiKey.isEmpty
                             || isConnecting
                     )
-                    Text("The key is stored in Keychain.")
+                    Text("Saved securely on this Mac.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 12)
         }
-        .font(.headline)
     }
 
     private var remoteModels: some View {
@@ -556,7 +597,7 @@ struct ConnectionsView: View {
         .foregroundStyle(color)
         .padding(.horizontal, 9)
         .frame(height: 26)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(AppStyle.surface)
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
@@ -585,10 +626,11 @@ struct ConnectionsView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Text("\(value)")
-                .font(.callout.weight(.medium))
+                .font(.system(size: 18, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func compactLatency(_ seconds: Double) -> some View {
@@ -601,6 +643,7 @@ struct ConnectionsView: View {
                 .monospacedDigit()
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
