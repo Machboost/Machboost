@@ -80,16 +80,16 @@ pip install -e ".[all]"
 Install the current CLI directly from its GitHub release tag:
 
 ```sh
-python3 -m pip install "machboost[mlx] @ git+https://github.com/VistritPandey/machboost.git@v0.16.16"
-python3 -m pip install "machboost[vision] @ git+https://github.com/VistritPandey/machboost.git@v0.16.16"
-python3 -m pip install "machboost[dflash] @ git+https://github.com/VistritPandey/machboost.git@v0.16.16"
+python3 -m pip install "machboost[mlx] @ git+https://github.com/VistritPandey/machboost.git@v0.16.17"
+python3 -m pip install "machboost[vision] @ git+https://github.com/VistritPandey/machboost.git@v0.16.17"
+python3 -m pip install "machboost[dflash] @ git+https://github.com/VistritPandey/machboost.git@v0.16.17"
 ```
 
 Update an existing install:
 
 ```sh
 python3 -m pip uninstall -y machboost
-python3 -m pip install "machboost[mlx] @ git+https://github.com/VistritPandey/machboost.git@v0.16.16"
+python3 -m pip install "machboost[mlx] @ git+https://github.com/VistritPandey/machboost.git@v0.16.17"
 machboost version
 ```
 
@@ -288,7 +288,7 @@ MachBoost alias uses the native 4-bit MLX-VLM conversion and recommends at least
 32 GB unified memory. Higher-bit variants require more memory.
 
 ```sh
-python3 -m pip install "machboost[vision] @ git+https://github.com/VistritPandey/machboost.git@v0.16.16"
+python3 -m pip install "machboost[vision] @ git+https://github.com/VistritPandey/machboost.git@v0.16.17"
 machboost pull muse-glimmer:30b
 machboost run muse-glimmer:30b --think high --show-thinking --show-stats
 machboost run muse-glimmer:30b --image ./screenshot.png --think medium
@@ -769,8 +769,11 @@ and Reveal in Finder actions. A trailing `branch -> working tree` panel shows
 the final repository-wide Git diff, while per-message patches retain the change
 history. Model protocol tokens are not shown as messages. Reasoning is disabled
 by default where the model supports that choice. Muse Glimmer always reasons, so
-MachBoost uses its documented `low` setting as the fast default and exposes
-`low`, `medium`, `high`, and `xhigh` in Generation controls.
+MachBoost uses its documented `low` setting as the fast default. The composer
+contains a reasoning-effort selector with Low, Medium, High, and Max (`xhigh`),
+a stepped slider, reset, and a Show reasoning toggle. Models that can disable
+reasoning also offer Off. The selector is hidden when the model lacks reasoning
+support or the selected paid-first route has no locally verified capabilities.
 Throughput shown in chat uses total model tokens divided by backend decode time
 across the complete assistant turn, including hidden reasoning, tool protocol,
 and follow-up rounds. It is not a visible-word rate.
