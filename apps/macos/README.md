@@ -167,6 +167,11 @@ exact replacements and new files always require confirmation.
 Reasoning is disabled by default where the model supports that choice. Muse
 Glimmer always reasons, so the app uses its documented `low` setting as the fast
 default instead of omitting the setting and triggering Muse's `high` default.
+Reasoning effort is selected in the composer, not Generation controls. Its
+popover has a stepped slider, model name, reset action, and Show reasoning
+toggle. Non-reasoning models hide the selector; Muse does not offer Off.
+Paid-first routes also hide it because the local catalog cannot validate the
+external model's capabilities.
 The displayed token rate counts
 all model-generated tokens, including reasoning and tool protocol, and divides
 them by backend decode time. It is not computed from visible answer text.
@@ -326,8 +331,8 @@ Build an ad-hoc signed DMG for local packaging and runtime tests without Apple
 credentials:
 
 ```sh
-./scripts/release_macos.sh 0.16.16 --local
-open dist/macos/MachBoost-0.16.16-arm64.dmg
+./scripts/release_macos.sh 0.16.17 --local
+open dist/macos/MachBoost-0.16.17-arm64.dmg
 ```
 
 Local mode builds the locked runtime, archives the arm64 app, embeds and signs
@@ -348,14 +353,14 @@ export MACHBOOST_DEVELOPER_ID='Developer ID Application: ...'
 export MACHBOOST_NOTARY_PROFILE=...
 export SPARKLE_PUBLIC_ED_KEY=...
 export SPARKLE_PRIVATE_KEY=/secure/path/to/sparkle-private-key
-./scripts/release_macos.sh 0.16.16
-./scripts/publish_macos_release.sh 0.16.16 ./release-notes/0.16.16.md
+./scripts/release_macos.sh 0.16.17
+./scripts/publish_macos_release.sh 0.16.17 ./release-notes/0.16.17.md
 ```
 
 The release script builds the embedded runtime, archives the arm64 app, signs
 nested Mach-O files and the app, creates and notarizes a DMG, staples the
 ticket, runs Gatekeeper verification, writes a SHA-256 checksum, and produces a
-signed Sparkle appcast. The publisher requires an existing `v0.16.16` tag, an
+signed Sparkle appcast. The publisher requires an existing `v0.16.17` tag, an
 authenticated GitHub CLI session, and an explicit release-notes file. It refuses
 to overwrite an existing release and uploads the DMG, checksum, and appcast to
 the matching GitHub release.
