@@ -157,10 +157,13 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Fixture response."].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["20.0 tok/s"].exists)
         // TTFT is measured at client receipt, so it varies with runner timing.
-        let ttft = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "[0-9]+\\.[0-9]{2}s TTFT")
-        ).firstMatch
+        let ttft = app.descendants(matching: .any)["message-ttft"]
         XCTAssertTrue(ttft.waitForExistence(timeout: 3))
+        let value = ttft.value as? String ?? ""
+        XCTAssertTrue(value.hasSuffix(" seconds"))
+        let seconds = Double(value.replacingOccurrences(of: " seconds", with: ""))
+        XCTAssertNotNil(seconds)
+        XCTAssertGreaterThanOrEqual(seconds ?? -1, 0)
     }
 
     @MainActor
@@ -370,12 +373,12 @@ final class MachBoostUITests: XCTestCase {
                 .waitForExistence(timeout: 2)
         )
 
-        let finished = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: download
+        // The download button disappears while progress is still active.
+        // A load control appears only after the catalog confirms cached weights.
+        XCTAssertTrue(
+            app.buttons["load-model-llama3.2:1b"].waitForExistence(timeout: 8)
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 5), .completed)
-        XCTAssertTrue(app.staticTexts["Downloaded"].firstMatch.exists)
+        XCTAssertFalse(download.exists)
     }
 
     @MainActor
