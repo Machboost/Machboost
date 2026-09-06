@@ -335,6 +335,10 @@ final class MachBoostUITests: XCTestCase {
                 NSPredicate(format: "label CONTAINS %@", "<tool_call")
             ).firstMatch.exists
         )
+        let preview = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        preview.name = "MachBoost coding workspace preview"
+        preview.lifetime = .keepAlways
+        add(preview)
     }
 
     @MainActor
