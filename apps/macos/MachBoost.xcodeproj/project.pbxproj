@@ -10,6 +10,7 @@
 		0987C108B164890D8BC63A27 /* MachBoostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10ECC494BAAC1C4D1DDC8EED /* MachBoostTests.swift */; };
 		0A3430DC80EBA445322F5720 /* MachBoostDaemonClient.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 8FAE0E7D9A52B90255424C39 /* MachBoostDaemonClient.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		0BB1BAC9946E953370C4F975 /* MachBoostAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB089EC757DC3AE6A41F230 /* MachBoostAPI.swift */; };
+		14C90363F332EB6A4ED6D710 /* ReasoningOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DB232CF502F31F1472E0B1F /* ReasoningOptions.swift */; };
 		1C9E4E6E69E7F0F84744660E /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C427B3847622D628B344F16 /* UpdateController.swift */; };
 		27E688AF9676E42DED5E32D6 /* PersistenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17FDB86433150ABA6AF28AD /* PersistenceModels.swift */; };
 		28A3C330430A225E9D3C74C5 /* ConversationCompactionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8109685D122E36CB13F3D759 /* ConversationCompactionTests.swift */; };
@@ -107,6 +108,7 @@
 		48709DA45E2A1AFBF0DCD64A /* UITestMachBoostAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestMachBoostAPI.swift; sourceTree = "<group>"; };
 		5C427B3847622D628B344F16 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		5C62A9D5540E53785741BB3B /* MessageContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageContentView.swift; sourceTree = "<group>"; };
+		5DB232CF502F31F1472E0B1F /* ReasoningOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReasoningOptions.swift; sourceTree = "<group>"; };
 		600150FBD098A6473249E022 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
 		604DB256210FD0992B5F8A6C /* ConversationExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExporter.swift; sourceTree = "<group>"; };
 		6AB089EC757DC3AE6A41F230 /* MachBoostAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachBoostAPI.swift; sourceTree = "<group>"; };
@@ -200,6 +202,7 @@
 				1710768B3904362005E5F087 /* MachBoostHostDiscovery.swift */,
 				5C62A9D5540E53785741BB3B /* MessageContentView.swift */,
 				0EFA8AE4D369703004BF4868 /* ModelsView.swift */,
+				5DB232CF502F31F1472E0B1F /* ReasoningOptions.swift */,
 				2436F81998E2D43F6056D376 /* RootView.swift */,
 				3915A2BFBF1C814FE0FD65D4 /* ServerView.swift */,
 				87B97748332FB15E03C019A8 /* SettingsView.swift */,
@@ -437,6 +440,7 @@
 				3746FD87157D34B034B053C8 /* MachBoostHostDiscovery.swift in Sources */,
 				62465861BCFFAEA08CA9DEC6 /* MessageContentView.swift in Sources */,
 				5DD9B55F557ACFA7AAF581A1 /* ModelsView.swift in Sources */,
+				14C90363F332EB6A4ED6D710 /* ReasoningOptions.swift in Sources */,
 				4CABF47F885FDD74C37117E1 /* RootView.swift in Sources */,
 				5D338DB8EEBB4A4EDBA60748 /* ServerView.swift in Sources */,
 				D31D40691C5E9FFEBE04703E /* SettingsView.swift in Sources */,
@@ -570,7 +574,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16016;
+				CURRENT_PROJECT_VERSION = 16017;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -587,7 +591,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				MACHBOOST_REPOSITORY = machboost/machboost;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.16.16;
+				MARKETING_VERSION = 0.16.17;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -675,7 +679,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16016;
+				CURRENT_PROJECT_VERSION = 16017;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -698,7 +702,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				MACHBOOST_REPOSITORY = machboost/machboost;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.16.16;
+				MARKETING_VERSION = 0.16.17;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
