@@ -42,11 +42,17 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(connections.waitForExistence(timeout: 10))
         connections.click()
 
-        XCTAssertTrue(app.staticTexts["Inference devices"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Your inference network"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["This Mac"].exists)
         XCTAssertTrue(app.staticTexts["Available devices"].exists)
-        XCTAssertTrue(app.staticTexts["Your inference pool"].exists)
-        XCTAssertTrue(app.disclosureTriangles["Connect by address"].exists)
+        XCTAssertTrue(app.staticTexts["Inference pool"].exists)
+        let connect = app.buttons["Connect device"]
+        XCTAssertTrue(connect.exists)
+        connect.click()
+        XCTAssertTrue(app.sheets.staticTexts["Connect a device"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.sheets.textFields["192.168.1.20:11435"].exists)
+        XCTAssertTrue(app.sheets.secureTextFields["API key from the host"].exists)
+        XCTAssertFalse(app.sheets.buttons["Connect"].isEnabled)
         XCTAssertFalse(app.radioButtons["Host pool"].exists)
     }
 
@@ -67,7 +73,7 @@ final class MachBoostUITests: XCTestCase {
         let app = launchApp()
         XCTAssertTrue(app.staticTexts["Server"].waitForExistence(timeout: 10))
         app.staticTexts["Server"].click()
-        let developerTab = app.radioButtons["Developer"]
+        let developerTab = app.buttons["Developer"]
         XCTAssertTrue(developerTab.waitForExistence(timeout: 3))
         developerTab.click()
         XCTAssertTrue(
@@ -101,7 +107,7 @@ final class MachBoostUITests: XCTestCase {
         let app = launchApp()
         XCTAssertTrue(app.staticTexts["Server"].waitForExistence(timeout: 10))
         app.staticTexts["Server"].click()
-        let developerTab = app.radioButtons["Developer"]
+        let developerTab = app.buttons["Developer"]
         XCTAssertTrue(developerTab.waitForExistence(timeout: 3))
         developerTab.click()
 
@@ -118,7 +124,7 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Server"].waitForExistence(timeout: 10))
         app.staticTexts["Server"].click()
 
-        let teamTab = app.radioButtons["Team"]
+        let teamTab = app.buttons["Team"]
         XCTAssertTrue(teamTab.waitForExistence(timeout: 3))
         teamTab.click()
         XCTAssertTrue(
@@ -130,7 +136,7 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Coding fleet readiness"].exists)
         XCTAssertTrue(app.staticTexts["Team environment"].exists)
 
-        let logsTab = app.radioButtons["Logs & evals"]
+        let logsTab = app.buttons["Logs & evals"]
         XCTAssertTrue(logsTab.exists)
         logsTab.click()
         XCTAssertTrue(app.staticTexts["Trace policy"].exists)
@@ -150,7 +156,11 @@ final class MachBoostUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Fixture response."].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["20.0 tok/s"].exists)
-        XCTAssertTrue(app.staticTexts["0.12s TTFT"].exists)
+        // TTFT is measured at client receipt, so it varies with runner timing.
+        let ttft = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "[0-9]+\\.[0-9]{2}s TTFT")
+        ).firstMatch
+        XCTAssertTrue(ttft.waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -345,6 +355,10 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Models"].waitForExistence(timeout: 10))
         app.staticTexts["Models"].firstMatch.click()
 
+        let search = app.searchFields["models-page-search-field"]
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        focus(search)
+        search.typeText("Llama 3.2 1B")
         let download = app.buttons["Download Llama 3.2 1B"]
         XCTAssertTrue(download.waitForExistence(timeout: 3))
         download.click()
@@ -373,7 +387,7 @@ final class MachBoostUITests: XCTestCase {
 
         let search = app.searchFields["model-search-field"]
         XCTAssertTrue(search.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["MLX native models"].exists)
+        XCTAssertTrue(app.staticTexts["Choose a model"].exists)
         focus(search)
         search.typeText("Muse")
 
