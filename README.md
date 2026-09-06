@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+[Website](https://machboost.github.io/Machboost/) · [Download for macOS](https://github.com/Machboost/Machboost/releases/latest) · [Source](https://github.com/Machboost/Machboost)
+
 MachBoost is an alpha-stage, local-first inference server, team gateway, native macOS app, and Python package for MLX, MLX-VLM, and Hugging Face models. It offers an Ollama-like model workflow, keeps models resident between requests, and streams text and visual chat. Team Mode adds scoped employee keys, fair admission, revision-aware private/shared memory, exact-request reuse, local traces, evaluations, and budgeted external-provider fallback. Optional acceleration paths target fresh text decoding on selected Qwen models, reusable local text, repeated image inputs, and selected Qwen3-VL visual-prefill workloads. Muse Glimmer runs through its native Hugging Face MLX-VLM conversions; Ollama is not required for that path.
 
 The paths have different contracts. Plain chat delegates generation to the selected backend and mainly provides residency and API compatibility. The optional DFlash backend proposes blocks for fresh prompts and emits only tokens approved by the target model. Context drafting instead proposes tokens from caller-supplied text; its cache-enabled MLX path remains experimental because a recent Llama 3.2 audit found one token-sequence mismatch in 21 pairs. Repeated-image acceleration reuses process-local visual work for unchanged image bytes. First-view Qwen3-VL compression is explicitly approximate and can change answers.
