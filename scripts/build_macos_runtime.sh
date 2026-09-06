@@ -61,6 +61,7 @@ SITE_PACKAGES="$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_paths()["pu
 "$PYTHON" -m pip install \
   --disable-pip-version-check \
   --no-cache-dir \
+  --no-compile \
   --only-binary=:all: \
   --platform macosx_14_0_arm64 \
   --python-version 3.13 \
@@ -72,12 +73,15 @@ SITE_PACKAGES="$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_paths()["pu
 "$PYTHON" -m pip install \
   --disable-pip-version-check \
   --no-cache-dir \
+  --no-compile \
   --no-deps \
   --target "$SITE_PACKAGES" \
   "$ROOT"
 
+# The source checkout's absolute path is not part of the distributable runtime.
+rm -f "$SITE_PACKAGES/machboost-${MACHBOOST_VERSION}.dist-info/direct_url.json"
 find "$OUTPUT" -type d -name __pycache__ -prune -exec rm -rf {} +
-"$PYTHON" - "$PYTHON_VERSION" "$MACHBOOST_VERSION" <<'PY'
+"$PYTHON" -B - "$PYTHON_VERSION" "$MACHBOOST_VERSION" <<'PY'
 import json
 import platform
 import sys
