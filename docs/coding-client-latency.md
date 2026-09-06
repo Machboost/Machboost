@@ -4,6 +4,11 @@ Investigation date: 2026-09-05. Source baseline: `4a87f55`.
 This is a source audit and implementation proposal, not a benchmark report.
 No inference experiments or application tests were run for this investigation.
 
+Implementation follow-up: [streaming fixes and measured results](streaming-latency-verification.md).
+That report covers the subsequent code changes, installed-app checks, HTTP
+measurements, and a cache experiment that remains disabled after equality failures.
+The findings below describe the source baseline, not the updated implementation.
+
 ## Separate computation from delivery
 
 Measure these intervals independently:
