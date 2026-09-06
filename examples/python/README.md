@@ -177,6 +177,31 @@ python3 examples/python/chat_latency_benchmark.py llama3.2:3b \
 
 The benchmark records client time to first text, wall time, backend prompt evaluation, and decode throughput. Each request receives a unique nonce, and two-engine runs alternate which runtime executes first. Ollama and MLX may use different templates, converted files, token counts, and quantization formats; cross-runtime output equality is recorded for visibility but is not an accuracy comparison.
 
+### Native And Claude-Compatible Stream Delivery
+
+With the installed app or daemon running and the model already downloaded:
+
+```sh
+python3 examples/python/stream_delivery_benchmark.py \
+  --app-token \
+  --model lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit \
+  --runs 3 --max-tokens 64
+```
+
+This measures first output, first answer text, and completion at an HTTP client
+of `/api/chat` and `/v1/messages`, with tool definitions present. It does not run
+inside Claude Desktop or execute tools. `--app-token` reads the local app's
+credential and is restricted to loopback; other endpoints use
+`MACHBOOST_API_TOKEN`. Add `--clients 2` to measure concurrent queueing or
+`--context-lines 160` for stable synthetic context. Reports omit credentials and
+response text. See [measured results and limits](../../docs/streaming-latency-verification.md).
+
+`prefix_checkpoint_benchmark.py` is a separate, opt-in research experiment using
+cached MLX text weights. It compares prefill snapshots with the default path on
+identical prompts and token IDs. Some measured outputs differed, so checkpoints
+remain disabled in normal app, CLI, and server use. This is not a recommended
+production optimization.
+
 Repeated-image visual chat:
 
 ```sh
