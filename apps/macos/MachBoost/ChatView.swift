@@ -2656,8 +2656,7 @@ private struct MessageRow: View {
                     .help(ttftHelp)
                     .accessibilityElement(children: .ignore)
                     .accessibilityIdentifier("message-ttft")
-                    .accessibilityLabel("Time to first output")
-                    .accessibilityValue(String(format: "%.2f seconds", ttft))
+                    .accessibilityLabel(String(format: "Time to first output: %.2f seconds", ttft))
             }
             if let cached = message.cachedPromptTokens,
                let prompt = message.promptTokens,
