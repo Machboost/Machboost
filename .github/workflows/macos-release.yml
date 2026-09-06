@@ -133,6 +133,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          if [[ -f "release-notes/${MACHBOOST_RELEASE_VERSION}.md" ]]; then
+            cp "release-notes/${MACHBOOST_RELEASE_VERSION}.md" "$RUNNER_TEMP/machboost-release-notes.md"
+            exit 0
+          fi
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
@@ -233,6 +237,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          if [[ -f "release-notes/${MACHBOOST_RELEASE_VERSION}.md" ]]; then
+            cp "release-notes/${MACHBOOST_RELEASE_VERSION}.md" "$RUNNER_TEMP/machboost-release-notes.md"
+            exit 0
+          fi
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
