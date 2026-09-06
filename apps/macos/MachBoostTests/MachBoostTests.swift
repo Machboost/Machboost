@@ -5,6 +5,27 @@ import XCTest
 @testable import MachBoost
 
 final class MachBoostTests: XCTestCase {
+    func testStreamingPresentationPublishesFirstFragmentAndAlwaysFlushesTail() {
+        var throttle = StreamPresentationThrottle()
+        XCTAssertTrue(throttle.shouldPublish(at: 10))
+        XCTAssertFalse(throttle.shouldPublish(at: 10.001))
+        XCTAssertFalse(throttle.shouldPublish(at: 10.010))
+        XCTAssertTrue(throttle.shouldPublish(at: 10.040))
+        XCTAssertTrue(throttle.shouldPublish(at: 10.041, force: true))
+        XCTAssertFalse(throttle.shouldPublish(at: 10.042))
+    }
+
+    func testClientFirstOutputTimingIsNotOverwrittenByBackendTiming() throws {
+        var metrics = GenerationTurnMetrics()
+        metrics.recordFirstOutput(after: 0.42)
+        metrics.recordFirstOutput(after: 4.2)
+        let event = try JSONDecoder().decode(ChatEvent.self, from: Data(
+            #"{"done":true,"machboost":{"time_to_first_token_seconds":0.1}}"#.utf8
+        ))
+        metrics.absorb(event)
+        XCTAssertEqual(metrics.timeToFirstTokenSeconds, 0.42)
+    }
+
     @MainActor
     func testInferencePresentationSeparatesRemoteFailureFromLocalDestination() {
         let presentation = AppState.inferencePresentation(
