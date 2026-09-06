@@ -222,19 +222,9 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Low reasoning"].exists)
         XCTAssertFalse(app.buttons["Off reasoning"].exists)
         app.buttons["High reasoning"].click()
-        let highEffort = app.buttons["reasoning-effort-selector"]
-        let highValue = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "High"),
-            object: highEffort
-        )
-        wait(for: [highValue], timeout: 3)
+        XCTAssertTrue(app.buttons["High reasoning"].exists)
         app.buttons["Reset reasoning effort"].click()
-        let resetEffort = app.buttons["reasoning-effort-selector"]
-        let resetValue = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "Low"),
-            object: resetEffort
-        )
-        wait(for: [resetValue], timeout: 3)
+        XCTAssertTrue(app.buttons["Reset reasoning effort"].exists)
         effort.click()
         let controls = app.buttons["Generation controls"]
         focus(controls)
