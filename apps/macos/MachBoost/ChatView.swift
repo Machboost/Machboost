@@ -40,6 +40,7 @@ struct ChatView: View {
     @State private var isImporting = false
     @State private var isAddingWorkspace = false
     @State private var showsGenerationControls = false
+    @State private var showsReasoningControls = false
     @State private var showsModelBrowser = false
     @State private var modelSearch = ""
     @State private var modelFilter = ModelBrowserFilter.all
@@ -170,6 +171,11 @@ struct ChatView: View {
                 refreshWorkspaceChanges()
             }
         }
+        .onChange(of: reasoningOptions.isAvailable) {
+            if !reasoningOptions.isAvailable {
+                showsReasoningControls = false
+            }
+        }
         .onChange(of: workspaceChangeScope) {
             if showsWorkspaceChanges {
                 refreshWorkspaceChanges()
@@ -282,23 +288,15 @@ struct ChatView: View {
                 workspaceMenu(compact: narrow)
                     .frame(maxWidth: narrow ? 34 : 150)
 
-                if codingSessionAvailable {
-                    Button {
-                        showsWorkspaceChanges.toggle()
-                        if showsWorkspaceChanges {
-                            refreshWorkspaceChanges()
-                        }
-                    } label: {
-                        Image(systemName: "sidebar.trailing")
-                            .foregroundStyle(showsWorkspaceChanges ? Color.green : Color.secondary)
-                    }
-                    .buttonStyle(AppIconButtonStyle(selected: showsWorkspaceChanges))
-                    .accessibilityLabel("Workspace changes")
-                    .accessibilityIdentifier("workspace-changes-toggle")
-                    .help("Show workspace changes")
-                }
-
                 Spacer(minLength: 0)
+
+                if !compact, isCompactingContext {
+                    ProgressView().controlSize(.small)
+                        .help("Summarizing conversation")
+                } else if !compact, isPreparingCodingPrefix {
+                    ProgressView().controlSize(.small)
+                        .help("Preparing Dev mode")
+                }
 
                 inferenceHostMenu(compact: compact)
                     .frame(maxWidth: compact ? 34 : 170)
@@ -317,14 +315,20 @@ struct ChatView: View {
                     generationControls
                 }
 
-                if !compact, isCompactingContext {
-                    Label("Summarizing", systemImage: "text.append")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.green)
-                } else if !compact, isPreparingCodingPrefix {
-                    Label("Preparing Dev mode", systemImage: "bolt.horizontal.circle")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.green)
+                if codingSessionAvailable {
+                    Divider().frame(height: 20)
+                    Button {
+                        showsWorkspaceChanges.toggle()
+                        if showsWorkspaceChanges {
+                            refreshWorkspaceChanges()
+                        }
+                    } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(AppIconButtonStyle(selected: showsWorkspaceChanges))
+                    .accessibilityLabel("Workspace changes")
+                    .accessibilityIdentifier("workspace-changes-toggle")
+                    .help(showsWorkspaceChanges ? "Hide changes panel" : "Review workspace changes")
                 }
             }
             .padding(.horizontal, compact ? 10 : 16)
@@ -619,24 +623,6 @@ struct ChatView: View {
                 )
                 Slider(value: $temperature, in: 0...1, step: 0.05)
             }
-            if selectedModel?.supportsReasoning == true {
-                Picker("Reasoning", selection: reasoningSelection) {
-                    if !selectedModelRequiresReasoning {
-                        Text("Off").tag("off")
-                    }
-                    Text("Low").tag("low")
-                    Text("Medium").tag("medium")
-                    Text("High").tag("high")
-                    Text("Max").tag("xhigh")
-                }
-                .pickerStyle(.segmented)
-                .help(
-                    selectedModelRequiresReasoning
-                        ? "Muse Glimmer always reasons; Low is its fastest supported setting."
-                        : "Control how much reasoning the model performs."
-                )
-                Toggle("Show reasoning", isOn: $showReasoning)
-            }
             if let contextLength = selectedModel?.contextLength {
                 LabeledContent("Context window", value: contextLength.formatted())
             }
@@ -742,17 +728,19 @@ struct ChatView: View {
                 }
             }
         } label: {
-            if compact {
-                Image(systemName: routeMode.icon)
-                    .foregroundStyle(routeMode.usesExternal ? Color.green : Color.secondary)
-            } else {
-                Label(routeMode.shortTitle, systemImage: routeMode.icon)
-                    .font(.caption)
-                    .foregroundStyle(routeMode.usesExternal ? Color.green : Color.secondary)
-            }
+            ChatControlLabel(
+                title: routeMode.shortTitle,
+                symbol: routeMode.icon,
+                selected: routeMode.usesExternal,
+                isMenu: true,
+                compact: compact
+            )
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
+        .frame(height: 32)
         .accessibilityLabel("Inference route")
         .accessibilityValue(routeMode.title)
         .help(routeMode.help)
@@ -788,27 +776,18 @@ struct ChatView: View {
             }
             Text("Falls back only if the preferred device fails before sending output.")
         } label: {
-            if compact {
-                Image(
-                    systemName: selectedInferenceHostID == InferenceHostOption.automaticID
-                        ? "arrow.triangle.branch"
-                        : "desktopcomputer"
-                )
-                .foregroundStyle(.green)
-            } else {
-                Label(
-                    selectedInferenceHostOption?.name ?? "Automatic",
-                    systemImage: selectedInferenceHostID == InferenceHostOption.automaticID
-                        ? "arrow.triangle.branch"
-                        : "desktopcomputer"
-                )
-                .font(.caption)
-                .foregroundStyle(.green)
-                .lineLimit(1)
-            }
+            ChatControlLabel(
+                title: selectedInferenceHostOption?.name ?? "Automatic",
+                symbol: selectedInferenceHostID == InferenceHostOption.automaticID
+                    ? "point.3.connected.trianglepath.dotted" : "desktopcomputer",
+                isMenu: true,
+                compact: compact
+            )
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .frame(height: 32)
         .accessibilityLabel("Preferred inference device")
         .help("Choose the first device for this chat")
     }
@@ -983,7 +962,7 @@ struct ChatView: View {
                         }
                     }
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
                 Button {
                     isImporting = true
                 } label: {
@@ -993,19 +972,21 @@ struct ChatView: View {
                 .accessibilityLabel("Attach files")
                 .help("Attach text, code, folder, or image")
 
-                AppFlowLayout(spacing: 10, rowSpacing: 6) {
+                AppFlowLayout(spacing: 4, rowSpacing: 4) {
                     developerModeButton
+                    if codingSessionAvailable {
+                        permissionMenu
+                    }
+                    if reasoningOptions.isAvailable {
+                        reasoningButton
+                    }
                     if appState.mcpServers.contains(where: \.enabled) {
                         extensionToolsButton
                     }
                     if selectedWorkspace != nil, !codingSessionAvailable {
                         repositoryContextButton
                     }
-                    if codingSessionAvailable {
-                        permissionMenu
-                    }
                 }
-                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Group {
@@ -1056,6 +1037,101 @@ struct ChatView: View {
         .background(AppStyle.canvas)
     }
 
+    private var reasoningButton: some View {
+        Button {
+            showsReasoningControls.toggle()
+        } label: {
+            ChatControlLabel(
+                title: reasoningOptions.selection(reasoningStrength)?.title ?? "Off",
+                symbol: "brain",
+                selected: effectiveReasoningStrength != nil,
+                isMenu: true
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("Reasoning effort")
+        .accessibilityValue(reasoningOptions.selection(reasoningStrength)?.title ?? "Off")
+        .accessibilityIdentifier("reasoning-effort-selector")
+        .help("Reasoning effort")
+        .popover(isPresented: $showsReasoningControls, arrowEdge: .top) {
+            reasoningControls
+        }
+    }
+
+    @ViewBuilder
+    private var reasoningControls: some View {
+        if reasoningOptions.isAvailable {
+            VStack(spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(AppStyle.accent)
+                        .frame(width: 30, height: 30)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(reasoningOptions.selection(reasoningStrength)?.title ?? "Off")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text(selectedModel?.displayName ?? conversation.model)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        reasoningStrength = reasoningOptions.defaultLevel?.rawValue ?? "off"
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(AppIconButtonStyle())
+                    .accessibilityLabel("Reset reasoning effort")
+                    .help("Reset reasoning effort")
+                }
+
+                VStack(spacing: 8) {
+                    Slider(
+                        value: reasoningSliderSelection,
+                        in: 0...Double(reasoningOptions.levels.count - 1),
+                        step: 1
+                    )
+                    .tint(AppStyle.green)
+                    .accessibilityLabel("Reasoning level")
+                    .accessibilityValue(reasoningOptions.selection(reasoningStrength)?.title ?? "Off")
+                    .accessibilityIdentifier("reasoning-effort-slider")
+
+                    HStack(spacing: 0) {
+                        ForEach(reasoningOptions.levels) { level in
+                            Button {
+                                reasoningStrength = level.rawValue
+                            } label: {
+                                Text(level.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(
+                                        reasoningOptions.selection(reasoningStrength) == level
+                                            ? AppStyle.accent : Color.secondary
+                                    )
+                                    .frame(maxWidth: .infinity, minHeight: 24)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(level.title) reasoning")
+                            .accessibilityAddTraits(
+                                reasoningOptions.selection(reasoningStrength) == level ? .isSelected : []
+                            )
+                        }
+                    }
+                }
+
+                Divider()
+                Toggle("Show reasoning", isOn: $showReasoning)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.caption)
+            }
+            .padding(16)
+            .frame(width: 300)
+        }
+    }
+
     private var developerModeButton: some View {
         Button {
             guard selectedWorkspace != nil else {
@@ -1072,11 +1148,9 @@ struct ChatView: View {
                 showsWorkspaceChanges = false
             }
         } label: {
-            Label("Dev mode", systemImage: "terminal")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(codingSessionAvailable ? AppStyle.accent : Color.secondary)
+            ChatControlLabel(title: "Dev mode", symbol: "terminal", selected: codingSessionAvailable)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Developer mode")
         .accessibilityValue(codingSessionAvailable ? "On" : "Off")
@@ -1091,11 +1165,12 @@ struct ChatView: View {
         Button {
             extensionToolsEnabled.toggle()
         } label: {
-            Label("Tools", systemImage: "wrench.and.screwdriver")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(extensionToolsEnabled ? Color.teal : Color.secondary)
+            ChatControlLabel(
+                title: "Tools", symbol: "wrench.and.screwdriver",
+                selected: extensionToolsEnabled, tint: .teal
+            )
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Connected tools")
         .accessibilityValue(extensionToolsEnabled ? "On" : "Off")
@@ -1106,11 +1181,12 @@ struct ChatView: View {
         Button {
             repositoryContextEnabled.toggle()
         } label: {
-            Label("Repo context", systemImage: "text.magnifyingglass")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(repositoryContextEnabled ? Color.teal : Color.secondary)
+            ChatControlLabel(
+                title: "Repo context", symbol: "text.magnifyingglass",
+                selected: repositoryContextEnabled, tint: .teal
+            )
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Repository context")
         .accessibilityValue(repositoryContextEnabled ? "On" : "Off")
@@ -1131,12 +1207,19 @@ struct ChatView: View {
                 }
             }
         } label: {
-            Label(permissionMode.title, systemImage: permissionMode.icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(permissionMode == .bypass ? Color.orange : Color.green)
+            ChatControlLabel(
+                title: permissionMode.title,
+                symbol: permissionMode.icon,
+                selected: permissionMode == .bypass,
+                tint: .orange,
+                isMenu: true
+            )
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
+        .frame(height: 32)
         .accessibilityLabel("Coding permission mode")
         .accessibilityValue(permissionMode.title)
         .accessibilityIdentifier("coding-permission-mode")
@@ -1300,23 +1383,32 @@ struct ChatView: View {
         return identifiers.contains { $0.lowercased().contains("muse-glimmer") }
     }
 
-    private var reasoningSelection: Binding<String> {
+    private var reasoningOptions: ReasoningOptions {
+        ReasoningOptions(
+            supportsReasoning: selectedModel?.supportsReasoning == true
+                && (routeMode == .localOnly || routeMode == .localFirst),
+            requiresReasoning: selectedModelRequiresReasoning
+        )
+    }
+
+    private var reasoningSliderSelection: Binding<Double> {
         Binding(
             get: {
-                selectedModelRequiresReasoning && reasoningStrength == "off"
-                    ? "low"
-                    : reasoningStrength
+                let level = reasoningOptions.selection(reasoningStrength)
+                return Double(reasoningOptions.levels.firstIndex(where: { $0 == level }) ?? 0)
             },
-            set: { reasoningStrength = $0 }
+            set: { value in
+                guard value.isFinite else { return }
+                let levels = reasoningOptions.levels
+                guard !levels.isEmpty else { return }
+                let index = Int(min(max(value.rounded(), 0), Double(levels.count - 1)))
+                reasoningStrength = levels[index].rawValue
+            }
         )
     }
 
     private var effectiveReasoningStrength: String? {
-        guard selectedModel?.supportsReasoning == true else { return nil }
-        if selectedModelRequiresReasoning {
-            return reasoningStrength == "off" ? "low" : reasoningStrength
-        }
-        return reasoningStrength == "off" ? nil : reasoningStrength
+        reasoningOptions.strength(reasoningStrength)
     }
 
     private var selectedWorkspace: WorkspaceSummary? {
@@ -2421,6 +2513,46 @@ private enum ModelBrowserFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ChatControlLabel: View {
+    let title: String
+    let symbol: String
+    var selected = false
+    var tint: Color = AppStyle.accent
+    var isMenu = false
+    var compact = false
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 16, height: 16)
+            if !compact {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if isMenu {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 32)
+        .foregroundStyle(selected ? tint : Color.secondary)
+        .background(
+            selected ? tint.opacity(0.1) : isHovered ? AppStyle.hover : Color.clear,
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+    }
+}
+
 private enum ChatRouteMode: String, CaseIterable, Identifiable {
     case localOnly = "local_only"
     case localFirst = "local_first"
@@ -2449,7 +2581,7 @@ private enum ChatRouteMode: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .localOnly: "desktopcomputer"
+        case .localOnly: "arrow.triangle.branch"
         case .localFirst: "arrow.right.circle"
         case .externalFirst: "arrow.left.arrow.right"
         case .externalOnly: "cloud"
