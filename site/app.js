@@ -1,183 +1,188 @@
-const configuredRepository = document.documentElement.dataset.repository?.trim() ?? "";
-const pageOwner = window.location.hostname.endsWith(".github.io")
-  ? window.location.hostname.split(".")[0]
+const configuredRepository =
+  document.documentElement.dataset.repository?.trim() ?? "";
+const pageOwner = location.hostname.endsWith(".github.io")
+  ? location.hostname.split(".")[0]
   : "";
-const pageProject = window.location.pathname.split("/").filter(Boolean)[0] ?? "";
-const inferredRepository = pageOwner && pageProject ? `${pageOwner}/${pageProject}` : "";
-const repository = /^[^/\s]+\/[^/\s]+$/.test(configuredRepository)
+const pageProject = location.pathname.split("/").filter(Boolean)[0] ?? "";
+const repositoryPattern = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+const repository = repositoryPattern.test(configuredRepository)
   ? configuredRepository
-  : inferredRepository;
-const repositoryURL = repository ? `https://github.com/${repository}` : "https://github.com";
+  : pageOwner && pageProject
+    ? `${pageOwner}/${pageProject}`
+    : "";
+const repositoryURL = repository
+  ? `https://github.com/${repository}`
+  : "https://github.com";
 const latestReleaseURL = `${repositoryURL}/releases/latest`;
+
+function initializeIcons() {
+  window.lucide?.createIcons({
+    attrs: { "aria-hidden": "true", "stroke-width": "1.7" },
+  });
+}
 
 function initializeRepositoryLinks() {
   document.querySelectorAll("[data-repository-path]").forEach((link) => {
     link.href = `${repositoryURL}${link.dataset.repositoryPath ?? ""}`;
   });
-}
-
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "DMG";
-  }
-
-  const units = ["B", "KB", "MB", "GB"];
-  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** unitIndex;
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function initializeIcons() {
-  if (window.lucide) {
-    window.lucide.createIcons({
-      attrs: {
-        "aria-hidden": "true",
-        "stroke-width": "2",
-      },
-    });
-  }
+  document.querySelectorAll("[data-repository-text]").forEach((span) => {
+    span.textContent = repository || "OWNER/machboost";
+  });
 }
 
 function initializeMobileNavigation() {
   const button = document.querySelector(".mobile-menu");
-  const navigation = document.querySelector("#mobile-nav");
-
-  if (!button || !navigation) {
-    return;
-  }
-
+  const navigation = document.getElementById("mobile-nav");
+  const close = () => {
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-label", "Open navigation");
+    navigation.hidden = true;
+  };
   button.addEventListener("click", () => {
     const isOpen = button.getAttribute("aria-expanded") === "true";
     button.setAttribute("aria-expanded", String(!isOpen));
+    button.setAttribute(
+      "aria-label",
+      isOpen ? "Open navigation" : "Close navigation",
+    );
     navigation.hidden = isOpen;
-
-    const icon = button.querySelector("svg");
-    if (icon) {
-      icon.setAttribute("data-lucide", isOpen ? "menu" : "x");
-      initializeIcons();
+  });
+  navigation
+    .querySelectorAll("a")
+    .forEach((link) => link.addEventListener("click", close));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !navigation.hidden) {
+      close();
+      button.focus();
     }
   });
+  matchMedia("(min-width: 801px)").addEventListener("change", close);
+}
 
-  navigation.querySelectorAll("a").forEach((link) => {
-    link.addEventListener("click", () => {
-      button.setAttribute("aria-expanded", "false");
-      navigation.hidden = true;
+function initializeTabs() {
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function select(tab, focus = false) {
+    tabs.forEach((item) => {
+      const selected = item === tab;
+      item.setAttribute("aria-selected", String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      document.getElementById(item.getAttribute("aria-controls")).hidden =
+        !selected;
+    });
+    if (focus) tab.focus();
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (event) => {
+      const targets = {
+        ArrowRight: (index + 1) % tabs.length,
+        ArrowLeft: (index + tabs.length - 1) % tabs.length,
+        Home: 0,
+        End: tabs.length - 1,
+      };
+      if (Object.hasOwn(targets, event.key)) {
+        event.preventDefault();
+        select(tabs[targets[event.key]], true);
+      }
+    });
+  });
+}
+
+function initializeCopyButtons() {
+  document.querySelectorAll(".copy-button").forEach((button) => {
+    const label = button.getAttribute("aria-label");
+    let resetTimer;
+    button.addEventListener("click", async () => {
+      const target = document.getElementById(button.dataset.copyTarget);
+      try {
+        await navigator.clipboard.writeText(target.textContent);
+        button.setAttribute("aria-label", "Copied");
+        button.innerHTML = '<i data-lucide="check"></i>';
+        document.getElementById("copy-status").textContent =
+          "Example copied to clipboard.";
+        initializeIcons();
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => {
+          button.setAttribute("aria-label", label);
+          button.innerHTML = '<i data-lucide="copy"></i>';
+          initializeIcons();
+        }, 1800);
+      } catch {
+        document.getElementById("copy-status").textContent =
+          "Clipboard unavailable. Select the example text to copy it.";
+      }
     });
   });
 }
 
 async function initializeRelease() {
-  const downloadButtons = [
-    document.querySelector("#download-button"),
-    document.querySelector("#install-download-button"),
-  ].filter(Boolean);
-  const releaseStatus = document.querySelector("#release-status");
-  const releaseVersion = document.querySelector("#release-version");
-  const releaseSize = document.querySelector("#release-size");
-  const checksumLink = document.querySelector(".checksum-link");
-
-  downloadButtons.forEach((button) => {
-    button.href = latestReleaseURL;
-  });
-
-  if (!repository) {
-    if (releaseStatus) {
-      releaseStatus.textContent = "Open the project on GitHub to find the latest macOS release";
-    }
-    return;
-  }
-
+  const status = document.getElementById("release-status");
+  const downloadButtons = document.querySelectorAll("[data-download]");
+  if (!repository) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, {
-      headers: {
-        Accept: "application/vnd.github+json",
+    const response = await fetch(
+      `https://api.github.com/repos/${repository}/releases/latest`,
+      {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: controller.signal,
       },
-    });
-
-    if (!response.ok) {
-      throw new Error(`GitHub returned ${response.status}`);
-    }
-
+    );
+    if (!response.ok) throw new Error("Release unavailable");
     const release = await response.json();
-    const dmg = release.assets?.find((asset) => asset.name.toLowerCase().endsWith(".dmg"));
-
-    if (!dmg) {
-      throw new Error("The latest release does not contain a DMG");
-    }
-
+    const dmg = release.assets?.find((asset) =>
+      /^MachBoost-.*-arm64\.dmg$/.test(asset.name),
+    );
+    const trustedAsset = (asset) => {
+      try {
+        const url = new URL(asset?.browser_download_url);
+        return (
+          url.origin === "https://github.com" &&
+          url.pathname
+            .toLowerCase()
+            .startsWith(`/${repository.toLowerCase()}/releases/download/`)
+        );
+      } catch {
+        return false;
+      }
+    };
+    if (!trustedAsset(dmg)) throw new Error("DMG unavailable");
     downloadButtons.forEach((button) => {
       button.href = dmg.browser_download_url;
     });
-
-    const published = release.published_at
-      ? new Intl.DateTimeFormat("en", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }).format(new Date(release.published_at))
-      : null;
-
-    if (releaseStatus) {
-      releaseStatus.textContent = [
-        release.tag_name,
-        published,
-        "unsigned community preview",
-        "arm64",
-        "macOS 14+",
-      ]
-        .filter(Boolean)
-        .join(" · ");
+    const size =
+      Number.isFinite(dmg.size) && dmg.size > 0
+        ? `${(dmg.size / 1024 / 1024).toFixed(0)} MB`
+        : "DMG";
+    status.textContent = `${release.tag_name} · ${size} · Apple Silicon · macOS 14+`;
+    const checksum = release.assets.find(
+      (asset) => asset.name === `${dmg.name}.sha256`,
+    );
+    if (trustedAsset(checksum)) {
+      document.querySelector(".checksum-link").insertAdjacentElement(
+        "afterend",
+        Object.assign(document.createElement("a"), {
+          href: checksum.browser_download_url,
+          textContent: "SHA-256",
+          className: "checksum-download",
+        }),
+      );
     }
-    if (releaseVersion) {
-      releaseVersion.textContent = release.tag_name;
-    }
-    if (releaseSize) {
-      releaseSize.textContent = formatBytes(dmg.size);
-    }
-    if (checksumLink) {
-      checksumLink.href = release.html_url;
-    }
-  } catch (error) {
-    if (releaseStatus) {
-      releaseStatus.textContent =
-        "Unsigned community preview · arm64 · macOS 14+ · open GitHub for availability";
-    }
+  } catch {
+    downloadButtons.forEach((button) => {
+      button.href = latestReleaseURL;
+    });
+    status.textContent =
+      "Apple Silicon · macOS 14+ · Download from GitHub Releases";
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-function initializeCopyButtons() {
-  document.querySelectorAll(".copy-button").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const targetID = button.dataset.copyTarget;
-      const target = targetID ? document.getElementById(targetID) : null;
-      if (!target) {
-        return;
-      }
-
-      try {
-        await navigator.clipboard.writeText(target.innerText);
-        button.setAttribute("aria-label", "Copied");
-        button.innerHTML =
-          '<i data-lucide="check" aria-hidden="true"></i><span class="sr-only">Copied</span>';
-        initializeIcons();
-
-        window.setTimeout(() => {
-          button.setAttribute("aria-label", "Copy example");
-          button.innerHTML =
-            '<i data-lucide="copy" aria-hidden="true"></i><span class="sr-only">Copy example</span>';
-          initializeIcons();
-        }, 1800);
-      } catch (error) {
-        button.setAttribute("aria-label", "Copy failed");
-      }
-    });
-  });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  initializeIcons();
-  initializeMobileNavigation();
-  initializeRepositoryLinks();
-  initializeCopyButtons();
-  initializeRelease();
-});
+initializeIcons();
+initializeRepositoryLinks();
+initializeMobileNavigation();
+initializeTabs();
+initializeCopyButtons();
+initializeRelease();
