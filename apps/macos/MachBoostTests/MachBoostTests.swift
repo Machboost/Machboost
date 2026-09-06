@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MachBoostDaemonClient
 import SwiftData
@@ -5,6 +6,16 @@ import XCTest
 @testable import MachBoost
 
 final class MachBoostTests: XCTestCase {
+    #if !SWIFT_PACKAGE
+    @MainActor
+    func testMenuBarAssetHasNativeStatusItemDimensions() throws {
+        // MenuBarExtra uses the asset's intrinsic size, not the SwiftUI frame.
+        let image = try XCTUnwrap(Bundle.main.image(forResource: "MenuBarIcon"))
+        XCTAssertEqual(image.size, NSSize(width: 18, height: 18))
+        XCTAssertTrue(image.isTemplate)
+    }
+    #endif
+
     func testStreamingPresentationPublishesFirstFragmentAndAlwaysFlushesTail() {
         var throttle = StreamPresentationThrottle()
         XCTAssertTrue(throttle.shouldPublish(at: 10))
