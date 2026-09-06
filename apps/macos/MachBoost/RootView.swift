@@ -99,15 +99,6 @@ struct RootView: View {
             .padding(.vertical, 14)
 
             List(selection: $selection) {
-                Section("Workspace") {
-                    navigationLabel("Apps", symbol: "square.grid.2x2", destination: .apps)
-                    navigationLabel("Connections", symbol: "point.3.connected.trianglepath.dotted", destination: .connections)
-                    navigationLabel("Extensions", symbol: "puzzlepiece.extension", destination: .extensions)
-                    navigationLabel("Models", symbol: "shippingbox", destination: .models)
-                    navigationLabel("Server", symbol: "server.rack", destination: .server)
-                    navigationLabel("Settings", symbol: "gearshape", destination: .settings)
-                }
-
                 Section("Chats") {
                     ForEach(filteredConversations) { conversation in
                         HStack(spacing: 9) {
@@ -130,6 +121,15 @@ struct RootView: View {
                                 }
                             }
                     }
+                }
+
+                Section("Workspace") {
+                    navigationLabel("Apps", symbol: "square.grid.2x2", destination: .apps)
+                    navigationLabel("Connections", symbol: "point.3.connected.trianglepath.dotted", destination: .connections)
+                    navigationLabel("Extensions", symbol: "puzzlepiece.extension", destination: .extensions)
+                    navigationLabel("Models", symbol: "shippingbox", destination: .models)
+                    navigationLabel("Server", symbol: "server.rack", destination: .server)
+                    navigationLabel("Settings", symbol: "gearshape", destination: .settings)
                 }
 
             }
