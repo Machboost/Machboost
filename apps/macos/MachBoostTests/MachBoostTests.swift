@@ -6,6 +6,46 @@ import XCTest
 @testable import MachBoost
 
 final class MachBoostTests: XCTestCase {
+    func testReasoningControlsAreUnavailableForNonReasoningModels() {
+        for requiresReasoning in [false, true] {
+            let options = ReasoningOptions(supportsReasoning: false, requiresReasoning: requiresReasoning)
+            XCTAssertFalse(options.isAvailable)
+            XCTAssertTrue(options.levels.isEmpty)
+            XCTAssertNil(options.defaultLevel)
+            XCTAssertNil(options.selection("high"))
+            XCTAssertNil(options.strength("high"))
+        }
+    }
+
+    func testOptionalReasoningOffersOffAndPreservesSupportedEfforts() {
+        let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: false)
+        XCTAssertTrue(options.isAvailable)
+        XCTAssertEqual(options.levels, [.off, .low, .medium, .high, .xhigh])
+        XCTAssertEqual(options.defaultLevel, .off)
+        XCTAssertNil(options.strength("off"))
+        for level in options.levels {
+            XCTAssertEqual(options.selection(level.rawValue), level)
+        }
+        XCTAssertEqual(options.strength("xhigh"), "xhigh")
+    }
+
+    func testRequiredReasoningNormalizesOffAndInvalidPreferencesToLow() {
+        let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: true)
+        XCTAssertEqual(options.levels, [.low, .medium, .high, .xhigh])
+        XCTAssertEqual(options.defaultLevel, .low)
+        XCTAssertEqual(options.selection("off"), .low)
+        XCTAssertEqual(options.selection("unknown"), .low)
+        XCTAssertEqual(options.strength("off"), "low")
+        XCTAssertEqual(options.strength("high"), "high")
+    }
+
+    func testInvalidOptionalReasoningPreferenceDefaultsToOff() {
+        let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: false)
+        XCTAssertEqual(options.selection(""), .off)
+        XCTAssertEqual(options.selection("unsupported"), .off)
+        XCTAssertNil(options.strength("unsupported"))
+    }
+
     #if !SWIFT_PACKAGE
     @MainActor
     func testMenuBarAssetHasNativeStatusItemDimensions() throws {
