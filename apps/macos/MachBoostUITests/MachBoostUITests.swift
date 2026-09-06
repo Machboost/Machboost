@@ -159,9 +159,12 @@ final class MachBoostUITests: XCTestCase {
         // TTFT is measured at client receipt, so it varies with runner timing.
         let ttft = app.descendants(matching: .any)["message-ttft"]
         XCTAssertTrue(ttft.waitForExistence(timeout: 3))
-        let value = ttft.value as? String ?? ""
-        XCTAssertTrue(value.hasSuffix(" seconds"))
-        let seconds = Double(value.replacingOccurrences(of: " seconds", with: ""))
+        let value = ttft.label
+        XCTAssertTrue(value.hasPrefix("Time to first output: "), ttft.debugDescription)
+        XCTAssertTrue(value.hasSuffix(" seconds"), ttft.debugDescription)
+        let seconds = Double(value
+            .replacingOccurrences(of: "Time to first output: ", with: "")
+            .replacingOccurrences(of: " seconds", with: ""))
         XCTAssertNotNil(seconds)
         XCTAssertGreaterThanOrEqual(seconds ?? -1, 0)
     }
