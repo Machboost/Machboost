@@ -153,6 +153,66 @@ class ToolCallParsingTests(unittest.TestCase):
 
         self.assertEqual("".join(emitted), "You're welcome!")
 
+    def test_tool_stream_is_independent_of_fragment_boundaries(self):
+        fixtures = (
+            "to=user<|message|>You're welcome!",
+            "<|start|>assistant to=user<|message|>Hello world",
+            'Looking. <tool_call>{"name":"read_file","arguments":{"path":"a.py"}}</tool_call>',
+            'Looking. <atem:function_calls><atem:invoke name="read_file">'
+            '<atem:parameter name="path">a.py</atem:parameter>'
+            '</atem:invoke></atem:function_calls>',
+            'Looking. <|tool_call>call:read_file{path:<|"|>a.py<|"|>}<tool_call|>',
+            "Compare a < b, then return <div>hello</div>.",
+            "Hello\n\n    indented code\nmore prose",
+            "```python\nprint('hello')\n```",
+            "```\nprint('hello')\n```",
+            "`inline code` keeps streaming.",
+        )
+        for raw in fixtures:
+            expected, _ = extract_tool_calls(raw)
+            for size in range(1, 20):
+                with self.subTest(raw=raw, size=size):
+                    emitted = []
+                    stream = ToolAwareTextStream(emitted.append)
+                    for offset in range(0, len(raw), size):
+                        stream.feed(raw[offset:offset + size])
+                    self.assertEqual("".join(emitted), expected)
+
+    def test_tool_stream_emits_complete_calls_once_and_preserves_repeated_calls(self):
+        events = []
+        stream = ToolAwareTextStream(
+            lambda text: events.append(("text", text)),
+            lambda call: events.append(("tool", call["function"]["name"])),
+        )
+        call = '<tool_call>{"name":"read_file","arguments":{"path":"a.py"}}</tool_call>'
+        stream.feed("Before. " + call[:-1])
+        self.assertEqual(events, [("text", "Before.")])
+        stream.feed(call[-1:])
+        stream.feed(" After. " + call)
+        self.assertEqual([kind for kind, _ in events], ["text", "tool", "text", "tool"])
+        _, final_calls = extract_tool_calls(call + call + call)
+        self.assertEqual(len(stream.remaining_calls(final_calls)), 1)
+
+    def test_tool_stream_does_not_leak_bare_or_fenced_json_calls(self):
+        for raw in (
+            '{"name":"read_file","arguments":{}}',
+            '```json\n{"name":"read_file","arguments":{}}\n```',
+        ):
+            emitted = []
+            stream = ToolAwareTextStream(emitted.append)
+            for character in raw:
+                stream.feed(character)
+            self.assertEqual(emitted, [])
+
+    def test_tool_stream_does_not_reparse_a_growing_plain_answer(self):
+        emitted = []
+        stream = ToolAwareTextStream(emitted.append)
+        with patch("machboost.server.extract_tool_calls") as parse:
+            for _ in range(1000):
+                stream.feed("plain answer ")
+        parse.assert_not_called()
+        self.assertEqual(stream.visible, ("plain answer " * 1000).strip())
+
     def test_extract_tool_calls_removes_short_role_marker_without_eating_text(self):
         content, calls = extract_tool_calls(
             "assistant to=user<|message|>I'm doing great, thanks!"
