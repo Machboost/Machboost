@@ -536,6 +536,8 @@ final class MachBoostUITests: XCTestCase {
             "-machboost.chat.showReasoning", "YES",
             "-machboost.chat.autoSummarize", "YES",
             "-machboost.chat.summaryThreshold", "90",
+            "-machboost.chat.routeMode", "localOnly",
+            "-machboost.inference.mode.v1", "local",
         ]
         app.launchEnvironment["MACHBOOST_UI_TESTING"] = "1"
         app.launchEnvironment["MACHBOOST_SOURCE_ROOT"] = repositoryRoot()
