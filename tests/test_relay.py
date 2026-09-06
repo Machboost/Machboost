@@ -100,6 +100,80 @@ class ClaudeLoopbackRelayTests(unittest.TestCase):
         self.assertEqual(self.upstream.request_body, body)
         self.assertEqual(received.count(b'"content"'), 2)
 
+    def test_first_event_arrives_before_upstream_finishes(self):
+        for framing in ("length", "chunked", "close"):
+            for content_type in ("text/event-stream", "application/x-ndjson"):
+                with self.subTest(framing=framing, content_type=content_type):
+                    release = threading.Event()
+                    first = 'data: {"text":"Hello, 世界"}\n\n'.encode()
+                    last = b'data: {"done":true}\n\n'
+
+                    class GatedHandler(BaseHTTPRequestHandler):
+                        protocol_version = "HTTP/1.1"
+
+                        def do_GET(handler):
+                            handler.send_response(200)
+                            handler.send_header("Content-Type", content_type)
+                            if framing == "length":
+                                handler.send_header("Content-Length", str(len(first + last)))
+                            elif framing == "chunked":
+                                handler.send_header("Transfer-Encoding", "chunked")
+                            else:
+                                handler.send_header("Connection", "close")
+                            handler.end_headers()
+
+                            def write(chunk):
+                                if framing == "chunked":
+                                    handler.wfile.write(f"{len(chunk):x}\r\n".encode())
+                                handler.wfile.write(chunk)
+                                if framing == "chunked":
+                                    handler.wfile.write(b"\r\n")
+                                handler.wfile.flush()
+
+                            # Split a UTF-8 character across upstream writes too.
+                            split = first.index("世".encode()) + 1
+                            write(first[:split])
+                            write(first[split:])
+                            release.wait(3)
+                            write(last)
+                            if framing == "chunked":
+                                handler.wfile.write(b"0\r\n\r\n")
+                                handler.wfile.flush()
+
+                        def log_message(self, *args):
+                            pass
+
+                    upstream = ThreadingHTTPServer(("127.0.0.1", 0), GatedHandler)
+                    relay = LoopbackRelayServer(
+                        ("127.0.0.1", 0),
+                        upstream=f"http://127.0.0.1:{upstream.server_port}",
+                        upstream_token="upstream-test-key",
+                        local_token="local-test-key",
+                    )
+                    threads = [
+                        threading.Thread(target=server.serve_forever, daemon=True)
+                        for server in (upstream, relay)
+                    ]
+                    for thread in threads:
+                        thread.start()
+                    try:
+                        request = Request(
+                            f"http://127.0.0.1:{relay.server_port}/v1/messages",
+                            headers={"Authorization": "Bearer local-test-key"},
+                        )
+                        with urlopen(request, timeout=1) as response:
+                            self.assertEqual(response.readline(), first.splitlines(keepends=True)[0])
+                            self.assertFalse(release.is_set())
+                            release.set()
+                            self.assertEqual(response.read(), b"\n" + last)
+                    finally:
+                        release.set()
+                        for server in (relay, upstream):
+                            server.shutdown()
+                            server.server_close()
+                        for thread in threads:
+                            thread.join(3)
+
 
 if __name__ == "__main__":
     unittest.main()
