@@ -426,6 +426,77 @@ class MLXAdapterTest(unittest.TestCase):
         self.assertEqual(service.last_native_metrics["prompt_eval_tokens"], 1)
         self.assertEqual(service.last_native_metrics["cached_prompt_tokens"], 3)
 
+    def test_rotating_cache_keeps_immutable_prefill_checkpoint_for_followups(self):
+        mlx_lm = ModuleType("mlx_lm")
+        cache_module = ModuleType("mlx_lm.models.cache")
+        checkpoints = []
+        prompts = []
+
+        class State:
+            def __init__(self):
+                self.tokens = []
+
+        class Cache:
+            def __init__(self, **kwargs):
+                self.entries = []
+
+            def fetch_nearest_cache(self, model, tokens):
+                import copy
+                candidates = [(key, state) for namespace, key, state in self.entries
+                              if namespace == model and tokens[:len(key)] == key]
+                if not candidates:
+                    return None, tokens
+                key, state = max(candidates, key=lambda row: len(row[0]))
+                return copy.deepcopy(state), tokens[len(key):]
+
+            def insert_cache(self, model, tokens, state):
+                self.entries.append((model, list(tokens), state))
+                checkpoints.append((list(tokens), state))
+
+        def stream_generate(model, tokenizer, prompt, *, max_tokens, prompt_cache, prompt_progress_callback, prefill_step_size=2048):
+            prompts.append(list(prompt))
+            prompt_progress_callback(0, len(prompt))
+            for start in range(0, len(prompt) - 1, prefill_step_size):
+                end = min(len(prompt) - 1, start + prefill_step_size)
+                prompt_cache[0].tokens.extend(prompt[start:end])
+                prompt_progress_callback(end, len(prompt))
+            prompt_cache[0].tokens.extend(prompt[-1:])
+            prompt_progress_callback(len(prompt), len(prompt))
+            yield SimpleNamespace(token=90, text="answer")
+
+        mlx_lm.stream_generate = stream_generate
+        cache_module.LRUPromptCache = Cache
+        cache_module.make_prompt_cache = lambda _: [State()]
+        cache_module.can_trim_prompt_cache = lambda _: False
+        service = MLXCausalLMService(
+            object(), object(), native_prompt_cache_size=8,
+            experimental_prefill_checkpoints=True,
+        )
+        with patch.dict("sys.modules", {"mlx_lm": mlx_lm, "mlx_lm.models.cache": cache_module}):
+            service.generate_tokens((1, 2, 3, 4), max_tokens=1)
+            # Generation must not mutate the independently retained checkpoint.
+            self.assertEqual(checkpoints[0][0], [1, 2, 3])
+            self.assertEqual(checkpoints[0][1][0].tokens, [1, 2, 3])
+            service.generate_tokens((1, 2, 3, 4, 5), max_tokens=1)
+            self.assertEqual(prompts, [[1, 2, 3, 4], [4, 5]])
+            self.assertEqual(service.last_native_metrics["cached_prompt_tokens"], 3)
+            # Progress positions are relative to the suffix, keys are absolute.
+            self.assertEqual(checkpoints[2][0], [1, 2, 3, 4])
+            self.assertEqual(checkpoints[2][1][0].tokens, [1, 2, 3, 4])
+            service.configure_native_prompt_cache(enabled=True, namespace="different-tenant")
+            service.generate_tokens((1, 2, 3, 4, 5), max_tokens=1)
+            self.assertEqual(prompts[-1], [1, 2, 3, 4, 5])
+
+            checkpoints.clear()
+            service.clear_prompt_cache()
+            service.generate_tokens(tuple(range(300)), max_tokens=1)
+            self.assertEqual([len(key) for key, _ in checkpoints], [236, 299, 301])
+            checkpoints.clear()
+            service.clear_prompt_cache()
+            cache_module.can_trim_prompt_cache = lambda _: True
+            service.generate_tokens(tuple(range(300)), max_tokens=1)
+            self.assertEqual(len(checkpoints), 1)
+
     def test_native_prompt_cache_can_be_disabled(self):
         observed = []
         mlx_lm = ModuleType("mlx_lm")
@@ -454,6 +525,7 @@ class MLXAdapterTest(unittest.TestCase):
     def test_native_prompt_cache_is_opt_in_and_runtime_configurable(self):
         service = MLXCausalLMService(object(), object())
         self.assertEqual(service.native_prompt_cache_size, 0)
+        self.assertFalse(service.experimental_prefill_checkpoints)
 
         service.configure_native_prompt_cache(
             enabled=True,
