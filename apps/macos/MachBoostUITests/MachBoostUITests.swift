@@ -15,6 +15,11 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Models"].exists)
         XCTAssertTrue(app.staticTexts["Server"].exists)
         XCTAssertTrue(app.staticTexts["Settings"].exists)
+        XCTAssertFalse(app.buttons["reasoning-effort-selector"].exists)
+        XCTAssertLessThan(
+            app.staticTexts["Chats"].frame.minY,
+            app.staticTexts["Apps"].frame.minY
+        )
     }
 
     @MainActor
@@ -209,15 +214,22 @@ final class MachBoostUITests: XCTestCase {
         let app = launchApp(environment: [
             "MACHBOOST_UI_TEST_MODEL": "muse-glimmer:30b"
         ])
+        let effort = app.buttons["reasoning-effort-selector"]
+        XCTAssertTrue(effort.waitForExistence(timeout: 10))
+        XCTAssertEqual(effort.value as? String, "Low")
+        focus(effort)
+        XCTAssertTrue(app.sliders["reasoning-effort-slider"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Low reasoning"].exists)
+        XCTAssertFalse(app.buttons["Off reasoning"].exists)
+        app.buttons["High reasoning"].click()
+        XCTAssertEqual(effort.value as? String, "High")
+        app.buttons["Reset reasoning effort"].click()
+        XCTAssertEqual(effort.value as? String, "Low")
+        effort.click()
         let controls = app.buttons["Generation controls"]
-        XCTAssertTrue(controls.waitForExistence(timeout: 10))
         focus(controls)
-
-        XCTAssertTrue(app.staticTexts["Reasoning"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.radioButtons["Low"].exists)
-        XCTAssertEqual(app.radioButtons["Low"].value as? Int, 1)
-        XCTAssertFalse(app.radioButtons["Off"].exists)
         XCTAssertTrue(app.staticTexts["Context window"].exists)
+        XCTAssertFalse(app.sliders["reasoning-effort-slider"].exists)
         controls.click()
 
         send("Use Muse tools", in: app)
@@ -251,6 +263,13 @@ final class MachBoostUITests: XCTestCase {
         let developerMode = app.buttons["Developer mode"]
         XCTAssertTrue(developerMode.exists)
         XCTAssertEqual(developerMode.value as? String, "On")
+        XCTAssertEqual(developerMode.frame.height, permissionMode.frame.height, accuracy: 2)
+        XCTAssertEqual(developerMode.frame.midY, permissionMode.frame.midY, accuracy: 2)
+        XCTAssertLessThanOrEqual(developerMode.frame.maxX, permissionMode.frame.minX)
+        let changesToggle = app.buttons["workspace-changes-toggle"]
+        let generationControls = app.buttons["Generation controls"]
+        XCTAssertTrue(changesToggle.exists)
+        XCTAssertGreaterThan(changesToggle.frame.minX, generationControls.frame.maxX)
 
         send("Exercise coding agent", in: app)
 
