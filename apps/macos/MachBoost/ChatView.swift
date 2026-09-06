@@ -1701,6 +1701,7 @@ struct ChatView: View {
             turnMetrics.apply(to: assistant)
         }
         let roundLimit = toolsActive ? CodingWorkspace.maximumToolRounds + 1 : 2
+        let turnStartedAt = ProcessInfo.processInfo.systemUptime
         for round in 0 ..< roundLimit {
             try Task.checkCancellation()
             let requestID = round == 0 ? requestPrefix : "\(requestPrefix)-\(round)"
@@ -1757,6 +1758,25 @@ struct ChatView: View {
                 machboost: requestExtensions(memory: codingActive ? "off" : nil)
             )
             var roundContent = ""
+            var roundReasoning = ""
+            let assistantReasoningPrefix = assistant.reasoningContent ?? ""
+            var presentation = StreamPresentationThrottle()
+            var textNeedsPresentation = false
+
+            func flushStreamingText(force: Bool = false) {
+                guard textNeedsPresentation,
+                      presentation.shouldPublish(
+                        at: ProcessInfo.processInfo.systemUptime,
+                        force: force
+                      ) else { return }
+                assistant.content = assistantContentPrefix + roundContent
+                assistant.reasoningContent = assistantReasoningPrefix + roundReasoning
+                persist(timeline, to: assistant)
+                textNeedsPresentation = false
+            }
+
+            // Always publish the tail, including cancellation and stream errors.
+            defer { flushStreamingText(force: true) }
             var roundToolCalls: [APIToolCall] = []
             var hasVisibleRoundContent = false
             var hasVisibleRoundOutput = false
@@ -1767,9 +1787,9 @@ struct ChatView: View {
                 if let error = event.error { throw MachBoostAPIError.stream(error) }
                 if let thinking = event.message?.thinking, !thinking.isEmpty {
                     hasVisibleRoundOutput = true
-                    assistant.reasoningContent = (assistant.reasoningContent ?? "") + thinking
+                    roundReasoning += thinking
                     timeline.appendText(thinking, kind: .reasoning)
-                    persist(timeline, to: assistant)
+                    textNeedsPresentation = true
                 }
                 if let content = event.message?.content, !content.isEmpty {
                     let visibleChunk: String
@@ -1782,12 +1802,12 @@ struct ChatView: View {
                     if !visibleChunk.isEmpty {
                         hasVisibleRoundOutput = true
                         roundContent += visibleChunk
-                        assistant.content += visibleChunk
                         timeline.appendText(visibleChunk, kind: .content)
-                        persist(timeline, to: assistant)
+                        textNeedsPresentation = true
                     }
                 }
                 if let calls = event.message?.toolCalls, !calls.isEmpty {
+                    flushStreamingText(force: true)
                     hasVisibleRoundOutput = true
                     roundToolCalls.append(contentsOf: calls)
                     allToolCalls.append(contentsOf: calls)
@@ -1803,6 +1823,7 @@ struct ChatView: View {
                     persist(timeline, to: assistant)
                 }
                 if let fullContent = event.machboost?.fullContent {
+                    flushStreamingText(force: true)
                     reconcileRoundContent(
                         fullContent,
                         roundContent: &roundContent,
@@ -1814,6 +1835,12 @@ struct ChatView: View {
                     hasVisibleRoundOutput = hasVisibleRoundOutput
                         || !CodingWorkspace.visibleAssistantText(fullContent).isEmpty
                 }
+                if hasVisibleRoundOutput {
+                    turnMetrics.recordFirstOutput(
+                        after: ProcessInfo.processInfo.systemUptime - turnStartedAt
+                    )
+                }
+                flushStreamingText(force: event.done)
                 if event.done {
                     turnMetrics.absorb(
                         event,
@@ -1821,6 +1848,7 @@ struct ChatView: View {
                     )
                 }
             }
+            flushStreamingText(force: true)
             turnMetrics.recordRoute(appState.consumeInferenceRoute(requestID: requestID))
             if roundToolCalls.isEmpty, roundContent.isEmpty {
                 if !forceFinalResponse {
