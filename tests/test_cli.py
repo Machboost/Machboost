@@ -265,7 +265,7 @@ class CLITests(unittest.TestCase):
                 "launch",
                 "claude-desktop",
                 "--endpoint",
-                "http://192.168.0.58:11435",
+                "http://192.0.2.10:11435",
                 "--api-key",
                 "host-secret",
                 "--no-restart",
@@ -282,7 +282,7 @@ class CLITests(unittest.TestCase):
         self.assertEqual(token, "relay-secret")
         self.assertFalse(is_local)
         start_relay.assert_called_once_with(
-            "http://192.168.0.58:11435", "host-secret"
+            "http://192.0.2.10:11435", "host-secret"
         )
 
     def test_launch_rejects_gateway_without_claude_routes(self):
