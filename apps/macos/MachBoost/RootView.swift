@@ -18,10 +18,13 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 244, max: 300)
         } detail: {
             detail
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppStyle.canvas)
         }
+        .tint(AppStyle.accent)
         .frame(minWidth: 760, minHeight: 560)
         .onAppear {
             DispatchQueue.main.async {
@@ -71,27 +74,52 @@ struct RootView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("MachBoost")
-                    .font(.headline)
+            HStack(spacing: 10) {
+                Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 30, height: 30)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MachBoost")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Your workspace")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button(action: newConversation) {
                     Image(systemName: "square.and.pencil")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(AppIconButtonStyle())
                 .accessibilityLabel("New chat")
                 .help("New chat")
             }
-            .padding(.horizontal, 12)
-            .frame(height: 44)
-
-            Divider()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
 
             List(selection: $selection) {
+                Section("Workspace") {
+                    navigationLabel("Apps", symbol: "square.grid.2x2", destination: .apps)
+                    navigationLabel("Connections", symbol: "point.3.connected.trianglepath.dotted", destination: .connections)
+                    navigationLabel("Extensions", symbol: "puzzlepiece.extension", destination: .extensions)
+                    navigationLabel("Models", symbol: "shippingbox", destination: .models)
+                    navigationLabel("Server", symbol: "server.rack", destination: .server)
+                    navigationLabel("Settings", symbol: "gearshape", destination: .settings)
+                }
+
                 Section("Chats") {
                     ForEach(filteredConversations) { conversation in
-                        Label(conversation.title, systemImage: "bubble.left")
-                            .lineLimit(1)
+                        HStack(spacing: 9) {
+                            Image(systemName: "bubble.left")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            Text(conversation.title)
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                        }
+                            .padding(.vertical, 4)
                             .tag(SidebarDestination.conversation(conversation.id))
                             .contextMenu {
                                 Button("Rename") { beginRename(conversation) }
@@ -104,42 +132,54 @@ struct RootView: View {
                     }
                 }
 
-                Section("Workspace") {
-                    Label("Apps", systemImage: "square.grid.2x2")
-                        .tag(SidebarDestination.apps)
-                    Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
-                        .tag(SidebarDestination.connections)
-                    Label("Extensions", systemImage: "puzzlepiece.extension")
-                        .tag(SidebarDestination.extensions)
-                    Label("Models", systemImage: "shippingbox")
-                        .tag(SidebarDestination.models)
-                    Label("Server", systemImage: "server.rack")
-                        .tag(SidebarDestination.server)
-                    Label("Settings", systemImage: "gearshape")
-                        .tag(SidebarDestination.settings)
-                }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
             .searchable(text: $search, placement: .sidebar, prompt: "Search chats")
 
             Divider()
 
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(appState.serverIsRunning ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(appState.inferenceStatusLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                Text("\(appState.activeLoadedModels.count) loaded")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            Button {
+                selection = .connections
+            } label: {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(appState.serverIsRunning ? AppStyle.green : Color.orange)
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(appState.inferenceStatusLabel)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                        Text("\(appState.activeLoadedModels.count) models loaded")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
             }
-            .padding(12)
+            .buttonStyle(AppRowButtonStyle())
+            .help("Open connections")
+            .padding(8)
         }
+        .background(AppStyle.sidebar)
+    }
+
+    private func navigationLabel(_ title: String, symbol: String, destination: SidebarDestination) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(selection == destination ? AppStyle.accent : Color.secondary)
+                .frame(width: 18)
+            Text(title)
+                .font(.system(size: 12, weight: selection == destination ? .semibold : .regular))
+        }
+        .padding(.vertical, 4)
+        .tag(destination)
     }
 
     @ViewBuilder

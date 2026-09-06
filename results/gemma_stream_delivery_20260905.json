@@ -1,0 +1,89 @@
+{
+  "schema": "machboost.stream_delivery.v1",
+  "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+  "runs": 3,
+  "clients": 1,
+  "max_tokens": 64,
+  "context_lines": 0,
+  "measurement": "HTTP client, not Claude Desktop UI",
+  "rows": [
+    {
+      "run": 1,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "native",
+      "first_output_s": 3.364960749982856,
+      "first_text_s": 3.364960749982856,
+      "text_characters": 386,
+      "headers_s": 2.8132151250028983,
+      "load_s": 2.802837916,
+      "queue_s": 0.0,
+      "prompt_tokens": 76,
+      "cached_tokens": 0,
+      "generated_tokens": 64,
+      "wall_s": 4.195783416973427
+    },
+    {
+      "run": 1,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 0.24825820804107934,
+      "first_text_s": 0.24825820804107934,
+      "text_characters": 386,
+      "headers_s": 0.009026790969073772,
+      "generated_tokens": 64,
+      "wall_s": 1.0774120830465108
+    },
+    {
+      "run": 2,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 0.321661917027086,
+      "first_text_s": 0.321661917027086,
+      "text_characters": 393,
+      "headers_s": 0.007570125046186149,
+      "generated_tokens": 64,
+      "wall_s": 1.1512668329523876
+    },
+    {
+      "run": 2,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "native",
+      "first_output_s": 0.23952195898164064,
+      "first_text_s": 0.23952195898164064,
+      "text_characters": 393,
+      "headers_s": 0.0007035840535536408,
+      "load_s": 0.0,
+      "queue_s": 0.0,
+      "prompt_tokens": 76,
+      "cached_tokens": 75,
+      "generated_tokens": 64,
+      "wall_s": 1.069903542054817
+    },
+    {
+      "run": 3,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "native",
+      "first_output_s": 0.31559837493114173,
+      "first_text_s": 0.31559837493114173,
+      "text_characters": 395,
+      "headers_s": 0.0009043749887496233,
+      "load_s": 0.0,
+      "queue_s": 0.0,
+      "prompt_tokens": 76,
+      "cached_tokens": 48,
+      "generated_tokens": 64,
+      "wall_s": 1.1445191669045016
+    },
+    {
+      "run": 3,
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 0.24186812504194677,
+      "first_text_s": 0.24186812504194677,
+      "text_characters": 395,
+      "headers_s": 0.007642457960173488,
+      "generated_tokens": 64,
+      "wall_s": 1.0701669580303133
+    }
+  ]
+}

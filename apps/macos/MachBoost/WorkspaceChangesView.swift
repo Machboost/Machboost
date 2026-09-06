@@ -232,42 +232,47 @@ struct WorkspaceChangesView: View {
             Divider()
             content
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppStyle.inset)
         .accessibilityIdentifier("workspace-changes-panel")
     }
 
     private var header: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 16) {
             HStack(spacing: 9) {
-                Image(systemName: "arrow.triangle.branch")
-                    .foregroundStyle(.green)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(snapshot.branch.isEmpty ? "Workspace changes" : snapshot.branch)
-                        .font(.callout.weight(.semibold))
-                    Text("\(snapshot.changes.count) changed files")
-                        .font(.caption)
+                AppIconTile(symbol: "arrow.triangle.branch", size: 32)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Changes")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(snapshot.branch.isEmpty ? "Workspace" : snapshot.branch)
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 Spacer()
-                if snapshot.additions > 0 {
-                    Text("+\(snapshot.additions)")
-                        .foregroundStyle(.green)
-                }
-                if snapshot.deletions > 0 {
-                    Text("−\(snapshot.deletions)")
-                        .foregroundStyle(.red)
-                }
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .disabled(isRefreshing)
                 .help("Refresh changes")
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .help("Close changes")
+            }
+
+            HStack(spacing: 8) {
+                Text("\(snapshot.changes.count) changed files")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if snapshot.additions > 0 {
+                    Text("+\(snapshot.additions)").foregroundStyle(AppStyle.accent)
+                }
+                if snapshot.deletions > 0 {
+                    Text("−\(snapshot.deletions)").foregroundStyle(.red)
+                }
             }
 
             Picker("Change scope", selection: $scope) {
@@ -280,7 +285,7 @@ struct WorkspaceChangesView: View {
             .accessibilityIdentifier("workspace-change-scope")
         }
         .font(.caption.monospacedDigit())
-        .padding(12)
+        .padding(16)
     }
 
     @ViewBuilder
@@ -328,17 +333,16 @@ struct WorkspaceChangesView: View {
                                 }
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(AppRowButtonStyle(selected: expandedPaths.contains(change.path)))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             if expandedPaths.contains(change.path) {
-                            changeDetails(change)
-                                .padding(.top, 8)
-                                .padding(.leading, 18)
+                                changeDetails(change)
+                                    .padding(.top, 4)
                             }
                         }
                         .accessibilityIdentifier("workspace-change-\(change.path)")
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
                         Divider()
                     }
                 }
@@ -350,21 +354,26 @@ struct WorkspaceChangesView: View {
         HStack(spacing: 8) {
             Image(systemName: "doc.text")
                 .foregroundStyle(.secondary)
-            Text(change.path)
-                .font(.callout.monospaced())
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(change.path)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(change.status)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
-            Text(change.status)
-                .font(.caption)
-                .foregroundStyle(.secondary)
             if change.additions > 0 {
-                Text("+\(change.additions)").foregroundStyle(.green)
+                Text("+\(change.additions)").foregroundStyle(AppStyle.accent)
             }
             if change.deletions > 0 {
                 Text("−\(change.deletions)").foregroundStyle(.red)
             }
         }
         .font(.caption.monospacedDigit())
+        .padding(.vertical, 10)
+        .padding(.trailing, 8)
     }
 
     private func changeDetails(_ change: WorkspaceChange) -> some View {
@@ -376,34 +385,36 @@ struct WorkspaceChangesView: View {
                 } label: {
                     Image(systemName: "arrow.up.forward.app")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .help("Open file")
                 Button {
                     reveal(change.path)
                 } label: {
                     Image(systemName: "folder")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(AppIconButtonStyle())
                 .help("Reveal in Finder")
             }
             ScrollView(.horizontal) {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(change.patch.split(separator: "\n", omittingEmptySubsequences: false).enumerated()), id: \.offset) { _, line in
                         Text(String(line))
                             .foregroundStyle(diffColor(String(line)))
                     }
                 }
-                .font(.caption.monospaced())
+                .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
             }
             .frame(maxHeight: 420)
+            .background(AppStyle.canvas, in: RoundedRectangle(cornerRadius: 6))
         }
     }
 
     private func diffColor(_ line: String) -> Color {
         if line.hasPrefix("+++") || line.hasPrefix("---") { return .secondary }
-        if line.hasPrefix("+") { return .green }
+        if line.hasPrefix("+") { return AppStyle.accent }
         if line.hasPrefix("-") { return .red }
         return .primary
     }
