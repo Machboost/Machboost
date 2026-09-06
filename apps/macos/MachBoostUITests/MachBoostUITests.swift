@@ -222,9 +222,9 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Low reasoning"].exists)
         XCTAssertFalse(app.buttons["Off reasoning"].exists)
         app.buttons["High reasoning"].click()
-        XCTAssertEqual(effort.value as? String, "High")
+        XCTAssertEqual(app.buttons["reasoning-effort-selector"].value as? String, "High")
         app.buttons["Reset reasoning effort"].click()
-        XCTAssertEqual(effort.value as? String, "Low")
+        XCTAssertEqual(app.buttons["reasoning-effort-selector"].value as? String, "Low")
         effort.click()
         let controls = app.buttons["Generation controls"]
         focus(controls)
