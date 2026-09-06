@@ -228,7 +228,9 @@ class LoopbackRelayHandler(BaseHTTPRequestHandler):
             self.end_headers()
             response_started = True
             while True:
-                chunk = response.read(64 * 1024)
+                # read(n) waits to fill n bytes, delaying small SSE/NDJSON events.
+                # read1 forwards available bytes without decoding split UTF-8.
+                chunk = response.read1(64 * 1024)
                 if not chunk:
                     break
                 self.wfile.write(chunk)

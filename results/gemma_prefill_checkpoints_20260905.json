@@ -1,0 +1,196 @@
+{
+  "schema": "machboost.prefill_checkpoint_experiment.v1",
+  "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+  "runs": 3,
+  "context_lines": 128,
+  "max_tokens": 32,
+  "default_enabled": false,
+  "rows": [
+    {
+      "run": 1,
+      "mode": "baseline",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.94424587499816,
+        "generation_seconds": 0.4279732909053564,
+        "time_to_first_token_seconds": 2.0464149159379303,
+        "prompt_tokens_per_second": 810.5970650453311,
+        "generation_tokens_per_second": 74.7710211829004,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 1603,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.9714244580827653,
+        "generation_seconds": 0.43162591697182506,
+        "time_to_first_token_seconds": 2.0724137079669163,
+        "prompt_tokens_per_second": 813.1176385824782,
+        "generation_tokens_per_second": 74.13827284631947,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 1,
+      "mode": "checkpoint",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 2.015595291974023,
+        "generation_seconds": 0.4251272090477869,
+        "time_to_first_token_seconds": 2.1233309579547495,
+        "prompt_tokens_per_second": 781.9029972314063,
+        "generation_tokens_per_second": 75.27158770118382,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 91,
+        "cached_prompt_tokens": 1512,
+        "prompt_eval_seconds": 0.24261204199865463,
+        "generation_seconds": 0.42452429106924683,
+        "time_to_first_token_seconds": 0.3442202089354396,
+        "prompt_tokens_per_second": 375.08443212602214,
+        "generation_tokens_per_second": 75.37848993140484,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 1,
+      "first_turn_exact": true,
+      "followup_exact": true,
+      "exact_token_outputs": true
+    },
+    {
+      "run": 2,
+      "mode": "checkpoint",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 2.014518667012453,
+        "generation_seconds": 0.4254620000720024,
+        "time_to_first_token_seconds": 2.121077499934472,
+        "prompt_tokens_per_second": 782.3208718821257,
+        "generation_tokens_per_second": 75.21235737759078,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 91,
+        "cached_prompt_tokens": 1512,
+        "prompt_eval_seconds": 0.23967558296862987,
+        "generation_seconds": 0.4377245000796393,
+        "time_to_first_token_seconds": 0.3458000839455053,
+        "prompt_tokens_per_second": 379.6798942673714,
+        "generation_tokens_per_second": 73.10534364463936,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 2,
+      "mode": "baseline",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.939220041036606,
+        "generation_seconds": 0.42582324997056276,
+        "time_to_first_token_seconds": 2.0422630419488996,
+        "prompt_tokens_per_second": 812.6978716440825,
+        "generation_tokens_per_second": 75.14855048946286,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 1603,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.9741744169732556,
+        "generation_seconds": 0.4248622501036152,
+        "time_to_first_token_seconds": 2.0770212500356138,
+        "prompt_tokens_per_second": 811.9849929256358,
+        "generation_tokens_per_second": 75.31852969332026,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 2,
+      "first_turn_exact": false,
+      "followup_exact": true,
+      "exact_token_outputs": false
+    },
+    {
+      "run": 3,
+      "mode": "baseline",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.935397458029911,
+        "generation_seconds": 0.4251398340566084,
+        "time_to_first_token_seconds": 2.041970291058533,
+        "prompt_tokens_per_second": 814.3030225968414,
+        "generation_tokens_per_second": 75.2693524261458,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 1603,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 1.9710982500109822,
+        "generation_seconds": 0.4252388329477981,
+        "time_to_first_token_seconds": 2.075070333085023,
+        "prompt_tokens_per_second": 813.2522059674442,
+        "generation_tokens_per_second": 75.25182913839924,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 3,
+      "mode": "checkpoint",
+      "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+      "common_prompt_tokens": 1572,
+      "first_turn": {
+        "prompt_tokens": 1576,
+        "prompt_eval_tokens": 1576,
+        "cached_prompt_tokens": 0,
+        "prompt_eval_seconds": 2.0180948339402676,
+        "generation_seconds": 0.4263222920708359,
+        "time_to_first_token_seconds": 2.12739475001581,
+        "prompt_tokens_per_second": 780.9345594145885,
+        "generation_tokens_per_second": 75.0605834955565,
+        "prompt_cache_namespace": "default"
+      },
+      "followup": {
+        "prompt_tokens": 1603,
+        "prompt_eval_tokens": 91,
+        "cached_prompt_tokens": 1512,
+        "prompt_eval_seconds": 0.23979745898395777,
+        "generation_seconds": 0.42634108290076256,
+        "time_to_first_token_seconds": 0.3450718750245869,
+        "prompt_tokens_per_second": 379.486923612847,
+        "generation_tokens_per_second": 75.05727522732894,
+        "prompt_cache_namespace": "default"
+      }
+    },
+    {
+      "run": 3,
+      "first_turn_exact": false,
+      "followup_exact": true,
+      "exact_token_outputs": false
+    }
+  ]
+}

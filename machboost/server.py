@@ -3283,7 +3283,18 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 }
             )
 
-        tool_stream = ToolAwareTextStream(emit)
+        def emit_tool(call: dict[str, Any]) -> None:
+            self.write_json_line(
+                {
+                    "request_id": request_id,
+                    "model": model,
+                    "created_at": utc_timestamp(),
+                    "message": {"role": "assistant", "content": "", "tool_calls": ollama_tool_calls([call])},
+                    "done": False,
+                }
+            )
+
+        tool_stream = ToolAwareTextStream(emit, emit_tool)
 
         try:
             result = self.run_traced_operation(
@@ -3352,8 +3363,8 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             elif tool_stream.visible:
                 remaining_content = ""
             message = {"role": "assistant", "content": remaining_content}
-            if tool_calls:
-                message["tool_calls"] = ollama_tool_calls(tool_calls)
+            if pending_calls := tool_stream.remaining_calls(tool_calls):
+                message["tool_calls"] = ollama_tool_calls(pending_calls)
             self.write_json_line(
                 {
                     "request_id": request_id,
@@ -3796,6 +3807,8 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 logprobs=[],
             )
 
+        tool_stream = ToolAwareTextStream(emit)
+
         try:
             result = self.run_traced_operation(
                 request_id,
@@ -3806,7 +3819,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                     prepared.messages,
                     options=prepared.options,
                     context=prepared.context,
-                    emit=None if prepared.options.get("_tools") else emit,
+                    emit=tool_stream.feed if prepared.options.get("_tools") else emit,
                     on_admitted=on_admitted,
                     cancel_event=cancel_event,
                 ),
@@ -4070,7 +4083,12 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             )
 
         def emit_thinking(text: str) -> None:
-            nonlocal thinking_index, next_block_index, streamed_thinking
+            nonlocal thinking_index, text_index, next_block_index, streamed_thinking
+            if not text:
+                return
+            if text_index is not None:
+                event("content_block_stop", index=text_index)
+                text_index = None
             if thinking_index is None:
                 thinking_index = next_block_index
                 next_block_index += 1
@@ -4087,7 +4105,12 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             )
 
         def emit(text: str) -> None:
-            nonlocal text_index, next_block_index, streamed_text
+            nonlocal text_index, thinking_index, next_block_index, streamed_text
+            if not text:
+                return
+            if thinking_index is not None:
+                event("content_block_stop", index=thinking_index)
+                thinking_index = None
             if text_index is None:
                 text_index = next_block_index
                 next_block_index += 1
@@ -4103,6 +4126,36 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 delta={"type": "text_delta", "text": text},
             )
 
+        def emit_tool(call: dict[str, Any]) -> None:
+            nonlocal thinking_index, text_index, next_block_index
+            if thinking_index is not None:
+                event("content_block_stop", index=thinking_index)
+                thinking_index = None
+            if text_index is not None:
+                event("content_block_stop", index=text_index)
+                text_index = None
+            function = dict(call.get("function") or {})
+            index = next_block_index
+            next_block_index += 1
+            event(
+                "content_block_start",
+                index=index,
+                content_block={
+                    "type": "tool_use",
+                    "id": str(call.get("id") or f"call_{uuid.uuid4().hex[:24]}"),
+                    "name": str(function.get("name") or ""),
+                    "input": {},
+                },
+            )
+            event(
+                "content_block_delta",
+                index=index,
+                delta={"type": "input_json_delta", "partial_json": str(function.get("arguments") or "{}")},
+            )
+            event("content_block_stop", index=index)
+
+        tool_stream = ToolAwareTextStream(emit, emit_tool)
+
         try:
             result = self.run_traced_operation(
                 request_id,
@@ -4113,7 +4166,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                     prepared.messages,
                     options=prepared.options,
                     context=prepared.context,
-                    emit=None if prepared.options.get("_tools") else emit,
+                    emit=tool_stream.feed if prepared.options.get("_tools") else emit,
                     emit_thinking=emit_thinking,
                     on_admitted=on_admitted,
                     cancel_event=cancel_event,
@@ -4138,29 +4191,12 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             emit(remaining)
         if thinking_index is not None:
             event("content_block_stop", index=thinking_index)
+            thinking_index = None
         if text_index is not None:
             event("content_block_stop", index=text_index)
-        for call in tool_calls:
-            function = dict(call.get("function") or {})
-            arguments = str(function.get("arguments") or "{}")
-            index = next_block_index
-            next_block_index += 1
-            event(
-                "content_block_start",
-                index=index,
-                content_block={
-                    "type": "tool_use",
-                    "id": str(call.get("id") or f"call_{uuid.uuid4().hex[:24]}"),
-                    "name": str(function.get("name") or ""),
-                    "input": {},
-                },
-            )
-            event(
-                "content_block_delta",
-                index=index,
-                delta={"type": "input_json_delta", "partial_json": arguments},
-            )
-            event("content_block_stop", index=index)
+            text_index = None
+        for call in tool_stream.remaining_calls(tool_calls):
+            emit_tool(call)
         usage = usage_from_result(result)
         event(
             "message_delta",
@@ -4414,6 +4450,8 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 }
             )
 
+        tool_stream = ToolAwareTextStream(emit)
+
         try:
             result = self.run_traced_operation(
                 request_id,
@@ -4424,7 +4462,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                     messages,
                     options=options,
                     context=context,
-                    emit=None if options.get("_tools") else emit,
+                    emit=tool_stream.feed if options.get("_tools") else emit,
                     emit_thinking=emit_thinking,
                     on_admitted=on_admitted,
                     cancel_event=cancel_event,
@@ -4480,10 +4518,12 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         )
         if options.get("_tools"):
             delta: dict[str, Any] = {}
-            if content:
-                delta["content"] = content
+            if remaining := stream_remainder(content, streamed_content):
+                delta["content"] = remaining
             if tool_calls:
-                delta["tool_calls"] = tool_calls
+                delta["tool_calls"] = [
+                    {**call, "index": index} for index, call in enumerate(tool_calls)
+                ]
             if delta:
                 self.write_sse(
                     {
@@ -5915,32 +5955,163 @@ def extract_tool_calls(text: str) -> tuple[str, list[dict[str, Any]]]:
 
 
 class ToolAwareTextStream:
-    """Stream visible prose while withholding model tool protocol markup."""
+    """Consume protocol fragments once; never reparse already-emitted prose."""
 
-    def __init__(self, emit: Callable[[str], None]) -> None:
+    _tool_markers = {
+        "<tool_call": "</tool_call>",
+        "<atem:function_calls>": "</atem:function_calls>",
+        "<|tool_call>": "<tool_call|>",
+    }
+
+    def __init__(
+        self,
+        emit: Callable[[str], None],
+        emit_tool: Optional[Callable[[dict[str, Any]], None]] = None,
+    ) -> None:
         self.emit = emit
-        self.raw = ""
-        self.visible = ""
+        self.emit_tool = emit_tool
+        self._parts: list[str] = []
+        self._pending = ""
+        self._space = ""
+        self._initial = True
+        self._deferred_json = False
+        self._tool_end: Optional[str] = None
+        self._tool_search_from = 0
+        self.calls: list[dict[str, Any]] = []
+
+    @property
+    def visible(self) -> str:
+        return "".join(self._parts)
+
+    def _prose(self, text: str) -> None:
+        text = self._space + text
+        if not self._parts:
+            text = text.lstrip()
+        ready = text.rstrip()
+        self._space = text[len(ready):]
+        if ready:
+            self._parts.append(ready)
+            self.emit(ready)
 
     def feed(self, text: str) -> None:
-        if not text:
+        if not text or self._deferred_json:
             return
-        self.raw += text
-        visible, _ = extract_tool_calls(self.raw)
-        open_tag = visible.rfind("<")
-        if open_tag > visible.rfind(">"):
-            candidate = visible[open_tag:].lower()
-            protocol_prefixes = ("<tool_call", "<atem:", "<|")
-            if any(
-                prefix.startswith(candidate) or candidate.startswith(prefix)
-                for prefix in protocol_prefixes
-            ):
-                visible = visible[:open_tag].rstrip()
-        if visible.startswith(self.visible):
-            delta = visible[len(self.visible) :]
-            self.visible = visible
-            if delta:
-                self.emit(delta)
+        self._pending += text
+        while self._pending:
+            if self._tool_end:
+                end = self._pending.lower().find(self._tool_end, self._tool_search_from)
+                if end < 0:
+                    self._tool_search_from = max(0, len(self._pending) - len(self._tool_end))
+                    return
+                end += len(self._tool_end)
+                _, calls = extract_tool_calls(self._pending[:end])
+                self._pending = self._pending[end:]
+                self._tool_end = None
+                self._tool_search_from = 0
+                for call in calls:
+                    if self.emit_tool is not None:
+                        try:
+                            arguments = json.loads(call["function"]["arguments"])
+                        except (TypeError, ValueError):
+                            continue
+                        if not isinstance(arguments, dict):
+                            continue
+                        self.emit_tool(call)
+                        self.calls.append(call)
+                continue
+
+            if self._initial:
+                self._pending = self._pending.lstrip()
+                if not self._pending:
+                    return
+                lower = self._pending.lower()
+                # JSON calls are ambiguous until complete, but ordinary fenced
+                # source code should stream as soon as its language is known.
+                json_candidate = lower[0] in "{["
+                if lower.startswith("`"):
+                    if "```".startswith(lower):
+                        return
+                    if lower.startswith("```"):
+                        if "\n" not in lower:
+                            return
+                        language, body = lower[3:].split("\n", 1)
+                        if not language.strip() and not body.strip():
+                            return
+                        json_candidate = language.strip() == "json" or (
+                            not language.strip() and body.lstrip().startswith(("{", "["))
+                        )
+                if json_candidate:
+                    self._deferred_json = True
+                    self._pending = ""
+                    return
+                short_role = (
+                    "assistant".startswith(lower)
+                    or (lower.startswith("assistant ") and (
+                        "to=".startswith(lower[len("assistant "):])
+                        or lower[len("assistant "):].startswith("to=")
+                    ))
+                    or "to=".startswith(lower)
+                    or lower.startswith("to=")
+                )
+                if short_role:
+                    marker = lower.find("<|message|>")
+                    if marker >= 0:
+                        self._pending = self._pending[marker + len("<|message|>"):]
+                        self._initial = False
+                        continue
+                    if len(lower) < 256:
+                        return
+                self._initial = False
+
+            marker = self._pending.find("<")
+            if marker < 0:
+                self._prose(self._pending)
+                self._pending = ""
+                return
+            if marker:
+                self._prose(self._pending[:marker])
+                self._pending = self._pending[marker:]
+            lower = self._pending.lower()
+            for start, end in self._tool_markers.items():
+                if lower.startswith(start):
+                    self._tool_end = end
+                    break
+            if self._tool_end:
+                continue
+            if any(start.startswith(lower) for start in (*self._tool_markers, "<|")):
+                return
+            if lower.startswith("<|"):
+                end = lower.find("|>")
+                if end < 0:
+                    return
+                control = lower[:end + 2]
+                self._pending = self._pending[end + 2:]
+                if control == "<|start|>":
+                    self._initial = True
+                continue
+            # Ordinary HTML, comparisons, and code are not tool protocol.
+            self._prose("<")
+            self._pending = self._pending[1:]
+
+    def remaining_calls(self, final: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def key(call: dict[str, Any]) -> tuple[str, str]:
+            function = call.get("function") or {}
+            arguments = function.get("arguments") or "{}"
+            try:
+                arguments = json.dumps(json.loads(arguments), sort_keys=True)
+            except (TypeError, ValueError):
+                pass
+            return str(function.get("name") or ""), str(arguments)
+
+        emitted = [key(call) for call in self.calls]
+        remaining = []
+        for call in final:
+            signature = key(call)
+            if signature in emitted:
+                emitted.remove(signature)
+            else:
+                remaining.append(call)
+        return remaining
 
 
 def result_content_and_tool_calls(

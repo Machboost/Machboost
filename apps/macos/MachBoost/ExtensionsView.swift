@@ -38,11 +38,12 @@ struct ExtensionsView: View {
                         skills
                     }
                 }
-                .padding(22)
-                .frame(maxWidth: 920, alignment: .leading)
+                .padding(24)
+                .frame(maxWidth: 1000, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
         }
+        .background(AppStyle.canvas)
         .sheet(isPresented: $showsConnectorEditor) {
             MCPConnectorEditor(connector: editingConnector) { draft in
                 let saved = await appState.configureMCPServer(
@@ -84,19 +85,14 @@ struct ExtensionsView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Extensions")
-                    .font(.title2.weight(.semibold))
-                Text("Connect tools and add reusable guidance for every chat.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            AppPageHeading("Extensions", subtitle: "Tools and custom instructions")
             Spacer()
             Button {
                 Task { await appState.refreshMemoryAndProviders() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
+            .buttonStyle(AppIconButtonStyle())
             .help("Refresh extensions")
             Button {
                 if section == .connectors {
@@ -109,8 +105,10 @@ struct ExtensionsView: View {
             } label: {
                 Label(section == .connectors ? "Add connector" : "Add instructions", systemImage: "plus")
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
-        .padding(18)
+        .padding(24)
     }
 
     @ViewBuilder
@@ -129,16 +127,15 @@ struct ExtensionsView: View {
                     if connector.id != appState.mcpServers.last?.id { Divider() }
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
         }
     }
 
     private func connectorRow(_ connector: MCPServerSummary) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: connector.transport == "http" ? "network" : "terminal")
-                .font(.title3)
-                .foregroundStyle(connector.enabled ? Color.green : Color.secondary)
-                .frame(width: 28)
+            AppIconTile(
+                symbol: connector.transport == "http" ? "network" : "terminal",
+                color: connector.enabled ? AppStyle.accent : .secondary
+            )
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(connector.name).fontWeight(.medium)

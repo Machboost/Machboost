@@ -1,5 +1,18 @@
 import Foundation
 
+struct StreamPresentationThrottle {
+    private var lastPublishedAt: TimeInterval?
+    let interval: TimeInterval = 1.0 / 30.0
+
+    mutating func shouldPublish(at now: TimeInterval, force: Bool = false) -> Bool {
+        if let lastPublishedAt, !force, now - lastPublishedAt < interval {
+            return false
+        }
+        lastPublishedAt = now
+        return true
+    }
+}
+
 struct GenerationTurnMetrics: Equatable {
     private(set) var generatedTokens = 0
     private(set) var generationSeconds = 0.0
@@ -19,6 +32,11 @@ struct GenerationTurnMetrics: Equatable {
     private(set) var promptTokens: Int?
     private(set) var cachedPromptTokens: Int?
     private var recordedVisibleRound = false
+
+    mutating func recordFirstOutput(after seconds: Double) {
+        guard timeToFirstTokenSeconds == nil, seconds.isFinite, seconds >= 0 else { return }
+        timeToFirstTokenSeconds = seconds
+    }
 
     mutating func absorb(_ event: ChatEvent, producedVisibleOutput: Bool = true) {
         guard event.done else { return }
@@ -40,7 +58,9 @@ struct GenerationTurnMetrics: Equatable {
         }
         if producedVisibleOutput, !recordedVisibleRound {
             recordedVisibleRound = true
-            timeToFirstTokenSeconds = event.machboost?.timeToFirstTokenSeconds
+            if timeToFirstTokenSeconds == nil {
+                timeToFirstTokenSeconds = event.machboost?.timeToFirstTokenSeconds
+            }
             modelLoadSeconds = Double(event.loadDuration ?? 0) / 1_000_000_000
             queueWaitSeconds = event.machboost?.scheduler?.queueWaitSeconds
             if let duration = event.promptEvalDuration, duration > 0 {

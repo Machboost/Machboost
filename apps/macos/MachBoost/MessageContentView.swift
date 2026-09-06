@@ -5,7 +5,7 @@ struct MessageContentView: View {
     let content: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 13) {
             ForEach(Array(markdownBlocks.enumerated()), id: \.offset) { _, block in
                 switch block {
                 case let .paragraph(text):
@@ -16,6 +16,7 @@ struct MessageContentView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 6)
                 case let .bullet(text):
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Image(systemName: "circle.fill")
@@ -34,8 +35,8 @@ struct MessageContentView: View {
                 case let .quote(text):
                     HStack(alignment: .top, spacing: 10) {
                         Rectangle()
-                            .fill(Color.teal)
-                            .frame(width: 3)
+                            .fill(Color.teal.opacity(0.5))
+                            .frame(width: 2)
                         prose(text)
                             .foregroundStyle(.secondary)
                     }
@@ -53,18 +54,18 @@ struct MessageContentView: View {
 
     private func prose(_ text: String) -> some View {
         Text(markdown: text)
-            .font(.body)
+            .font(AppStyle.prose)
             .textSelection(.enabled)
-            .lineSpacing(4)
+            .lineSpacing(5)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: .title2.weight(.semibold)
-        case 2: .title3.weight(.semibold)
-        default: .headline
+        case 1: .system(size: 21, weight: .semibold)
+        case 2: .system(size: 18, weight: .semibold)
+        default: .system(size: 15, weight: .semibold)
         }
     }
 }
@@ -72,43 +73,56 @@ struct MessageContentView: View {
 private struct CodeBlockView: View {
     let language: String
     let code: String
+    @State private var copied = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 7) {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 Text(language.isEmpty ? "Code" : language)
-                    .font(.caption)
+                    .font(.system(size: 11, weight: .medium).monospaced())
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(code, forType: .string)
+                    copied = true
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(AppIconButtonStyle(selected: copied))
+                .accessibilityLabel(copied ? "Copied code" : "Copy code")
                 .help("Copy code")
+                .task(id: copied) {
+                    guard copied else { return }
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
+                    copied = false
+                }
             }
             .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .frame(height: 38)
+            .background(AppStyle.surface)
 
             Divider()
 
             ScrollView(.horizontal) {
                 Text(code)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineSpacing(5)
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(16)
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
-            .background(Color(nsColor: .textBackgroundColor))
+            .background(AppStyle.inset)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppStyle.line, lineWidth: 1)
         }
     }
 }

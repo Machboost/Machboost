@@ -26,6 +26,7 @@
 		5DD9B55F557ACFA7AAF581A1 /* ModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFA8AE4D369703004BF4868 /* ModelsView.swift */; };
 		62465861BCFFAEA08CA9DEC6 /* MessageContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C62A9D5540E53785741BB3B /* MessageContentView.swift */; };
 		6C23074F0BD6603DD259ADFC /* MachBoostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714090FF416A6EA959EEC39B /* MachBoostApp.swift */; };
+		77E55499D95F51AE4BCB14C4 /* AppStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFE5A19571C852B0910AF4B /* AppStyle.swift */; };
 		83071B908AF13ABA8004DA89 /* WorkspaceChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 448DB5E42AE60B53412CCC4D /* WorkspaceChangesView.swift */; };
 		8561AF7436B51B362040D2A3 /* AppsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 184291E3C6C4B05E48E92DE7 /* AppsView.swift */; };
 		93BC91102396CE7A20462363 /* ExtensionTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33773E2C3B189A7A1CF71383 /* ExtensionTools.swift */; };
@@ -130,6 +131,7 @@
 		E17FDB86433150ABA6AF28AD /* PersistenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceModels.swift; sourceTree = "<group>"; };
 		EE8900B13B2CE90C7E32FF10 /* DomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModels.swift; sourceTree = "<group>"; };
 		FA086D3518F155AACDAE9AB9 /* ExtensionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsView.swift; sourceTree = "<group>"; };
+		FAFE5A19571C852B0910AF4B /* AppStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStyle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -179,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				A8F16CEE5C06B74EBF5897BF /* AppState.swift */,
+				FAFE5A19571C852B0910AF4B /* AppStyle.swift */,
 				184291E3C6C4B05E48E92DE7 /* AppsView.swift */,
 				9AE21F9C8B888A139F3A8B1B /* Assets.xcassets */,
 				880BA16ED1FA2BE113A59AD6 /* ChatView.swift */,
@@ -418,6 +421,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AE67929B45EF5C34FC58DF67 /* AppState.swift in Sources */,
+				77E55499D95F51AE4BCB14C4 /* AppStyle.swift in Sources */,
 				8561AF7436B51B362040D2A3 /* AppsView.swift in Sources */,
 				A3ACD221FDF66A145D5980CF /* ChatView.swift in Sources */,
 				A1E629B42E54BCE71D379C2A /* CodingWorkspace.swift in Sources */,
@@ -566,7 +570,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16014;
+				CURRENT_PROJECT_VERSION = 16015;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -583,7 +587,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				MACHBOOST_REPOSITORY = machboost/machboost;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.16.14;
+				MARKETING_VERSION = 0.16.15;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -671,7 +675,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16014;
+				CURRENT_PROJECT_VERSION = 16015;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -694,7 +698,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				MACHBOOST_REPOSITORY = machboost/machboost;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.16.14;
+				MARKETING_VERSION = 0.16.15;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

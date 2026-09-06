@@ -65,10 +65,13 @@ struct MachBoostApp: App {
             MenuBarContent()
                 .environment(appState)
         } label: {
-            Label(
-                "MachBoost",
-                systemImage: appState.serverIsRunning ? "bolt.fill" : "bolt.slash"
-            )
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+                .accessibilityLabel("MachBoost")
+                .help(appState.serverIsRunning ? "MachBoost: server running" : "MachBoost: server stopped")
         }
         .menuBarExtraStyle(.menu)
 

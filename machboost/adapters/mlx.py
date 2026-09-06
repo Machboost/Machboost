@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import copy
 import importlib
 import time
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple
@@ -49,6 +50,7 @@ class MLXCausalLMService:
         native_prompt_cache_size: int = 0,
         native_prompt_cache_bytes: int = 2 * 1024 * 1024 * 1024,
         native_prompt_cache_namespace: str = "default",
+        experimental_prefill_checkpoints: bool = False,
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -61,6 +63,9 @@ class MLXCausalLMService:
         self.native_prompt_cache_size = max(0, int(native_prompt_cache_size))
         self.native_prompt_cache_bytes = max(0, int(native_prompt_cache_bytes))
         self.native_prompt_cache_namespace = str(native_prompt_cache_namespace or "default")
+        # Different prefill shapes can change greedy tokens on some models.
+        # This research path is never enabled by CLI/app/server defaults.
+        self.experimental_prefill_checkpoints = experimental_prefill_checkpoints
         self.forward_calls = 0
         self._cache = None
         self._cache_prefix: Tuple[Token, ...] = ()
@@ -323,6 +328,36 @@ class MLXCausalLMService:
                     pass
         if prompt_cache_store is not None and prompt_cache is not None:
             stream_kwargs["prompt_cache"] = prompt_cache
+            try:
+                from mlx_lm.models.cache import can_trim_prompt_cache
+            except ImportError:
+                can_trim_prompt_cache = None
+            if self.experimental_prefill_checkpoints and can_trim_prompt_cache is not None:
+                checkpoint_model_key = self._native_prompt_cache_key
+                loses_rewind = not can_trim_prompt_cache(prompt_cache) or any(
+                    getattr(layer, "max_size", 0) > 0
+                    and getattr(layer, "offset", 0) + len(prompt) >= layer.max_size
+                    for layer in prompt_cache
+                )
+                if loses_rewind and len(prompt) > 256:
+                    # Chat templates can change their final role/reasoning
+                    # header on a continuation. Retain a boundary before that
+                    # suffix instead of an unusable snapshot one token too late.
+                    stream_kwargs["prefill_step_size"] = min(2048, len(prompt) - 64)
+
+                def checkpoint_prompt(processed: int, total: int) -> None:
+                    # Rotating/recurrent caches cannot rewind after decoding.
+                    # Keep prefill boundaries before they are extended, within
+                    # the same tenant-isolated LRU size and byte budget.
+                    if 0 < processed < total and not can_trim_prompt_cache(prompt_cache):
+                        boundary = cached_prompt_tokens + processed
+                        prompt_cache_store.insert_cache(
+                            checkpoint_model_key,
+                            full_prompt[:boundary],
+                            copy.deepcopy(prompt_cache),
+                        )
+
+                stream_kwargs["prompt_progress_callback"] = checkpoint_prompt
         try:
             for response in stream_generate(
                 self.model,
