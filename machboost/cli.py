@@ -40,7 +40,7 @@ from .claude_desktop import (
 from .connections import ConnectionStore, normalize_endpoint
 from .context_bench import benchmark_context_acceleration, context_fingerprint
 from .latency import benchmark_chat_latency
-from .models import alias_rows, backend_available, catalog_rows, resolve_model
+from .models import alias_rows, backend_available, catalog_rows, preflight_model, resolve_model
 from .routing import HostTarget, MachBoostHostPool
 from .relay import start_claude_gateway_relay, stop_claude_gateway_relay
 from .server import (
@@ -1045,6 +1045,7 @@ def run_native_chat(
             print("try passing an explicit text or VLM backend", file=error_stream)
         return 2
 
+    configure_chat_reasoning(args)
     try:
         active_images, has_video_frames = prepare_visual_inputs(args, stream=error_stream)
     except Exception as exc:
@@ -1174,8 +1175,7 @@ def run_native_chat(
                 accelerator.generate_chat
             ).parameters:
                 kwargs["on_thinking"] = emit_thinking
-            if args.think:
-                kwargs["enable_thinking"] = args.think
+            kwargs["enable_thinking"] = args.think or False
             if getattr(accelerator, "supports_vision", False):
                 kwargs.update(
                     use_vision_cache=not args.no_vision_cache,
@@ -1208,10 +1208,7 @@ def run_native_chat(
         else:
             begin_reply()
             if thinking_started and not response:
-                console.notice(
-                    "The model used its output budget for reasoning before producing a final "
-                    "answer. Increase --max-tokens or disable reasoning."
-                )
+                console.notice(reasoning_only_notice(args.max_tokens, stats.generated_tokens))
             else:
                 print(response, flush=True, file=output_stream)
         if args.show_stats:
@@ -1396,8 +1393,35 @@ def run_ollama_chat(
         messages.append({"role": "assistant", "content": "".join(chunks)})
 
 
+def reasoning_only_notice(limit: int, generated: int) -> str:
+    if limit > 0 and generated >= limit:
+        return (
+            "The model reached the output cap during reasoning. "
+            "Use --max-tokens -1 to remove the cap, or choose a larger limit."
+        )
+    return "No visible answer arrived. The stream ended after reasoning."
+
+
+def configure_chat_reasoning(args: argparse.Namespace, *, client=None) -> None:
+    if args.think is None:
+        try:
+            metadata = (
+                client.show(args.model, preflight=True, backend=args.backend)
+                if client is not None else preflight_model(args.model, args.backend)
+            )
+            metadata = metadata.get("preflight") or metadata
+            args.think = "low" if "reasoning" in metadata.get("capabilities", ()) else False
+        except (MachBoostAPIError, OSError, ValueError):
+            # An unavailable capability probe must not make an otherwise usable model fail.
+            args.think = False
+    elif args.think == "off":
+        args.think = False
+    if args.think:
+        args.show_thinking = True
+
+
 def native_server_options(args: argparse.Namespace) -> dict:
-    return {
+    options = {
         "backend": args.backend,
         "context_paths": list(args.context or ()),
         "max_context_chars": args.max_context_chars,
@@ -1425,9 +1449,12 @@ def native_server_options(args: argparse.Namespace) -> dict:
         "draft_quant": args.draft_quant,
         "verify_mode": args.verify_mode,
         "num_ctx": args.ctx,
-        "_think": args.think or False,
-        "_reasoning_strength": args.think,
     }
+    if args.think is not None:
+        options["_think"] = False if args.think == "off" else args.think
+        if args.think and args.think != "off":
+            options["_reasoning_strength"] = args.think
+    return options
 
 
 def _automatic_host_pool(
@@ -1740,6 +1767,7 @@ def run_resident_chat(
     except MachBoostAPIError as exc:
         print(f"machboost load error: {exc}", file=error_stream)
         return 2
+    configure_chat_reasoning(args, client=client)
     preload_wall = time.perf_counter() - session_started
     instance = preload.get("instance") or {}
     backend = str(instance.get("backend") or "unknown")
@@ -1760,10 +1788,10 @@ def run_resident_chat(
     elif preload.get("warmup_scheduled") or instance.get("warming"):
         state += " | optimizing in background"
     route_name = str(getattr(args, "route", "local_only"))
-    route_display = route_name
+    route_display = route_name + f" | think {args.think or 'off'}"
     if coding is not None:
         route_display += (
-            f" | code {coding.permission_mode} | think {args.think or 'off'} | "
+            f" | code {coding.permission_mode} | "
             f"{coding.root.name}"
         )
     if console.pretty:
@@ -2028,10 +2056,7 @@ def run_resident_chat(
             elif answer_started:
                 print("", flush=True, file=output_stream)
             elif thinking_started:
-                message = (
-                    "The model used its output budget for reasoning before producing a final "
-                    "answer. Increase --max-tokens or use /think off."
-                )
+                message = reasoning_only_notice(args.max_tokens, int(final_row.get("eval_count") or 0))
                 console.notice(message) if console.pretty else print(
                     f"notice: {message}", file=output_stream
                 )
@@ -2132,6 +2157,7 @@ def run_resident_completion(args: argparse.Namespace, *, output_stream=None, err
             prompt = video_prompt(prompt)
         if args.direct:
             accelerator = load_native_accelerator(args, stream=error_stream)
+            configure_chat_reasoning(args)
             thinking_started = False
 
             def emit_thinking(text: str) -> None:
@@ -2147,9 +2173,9 @@ def run_resident_completion(args: argparse.Namespace, *, output_stream=None, err
                 "max_tokens": args.max_tokens,
                 "on_text": lambda text: print(text, end="", flush=True, file=output_stream),
             }
-            if args.think:
-                kwargs["enable_thinking"] = args.think
-            if args.show_thinking:
+            if getattr(accelerator, "supports_vision", False):
+                kwargs["enable_thinking"] = args.think or False
+            if args.show_thinking and "on_thinking" in inspect.signature(accelerator.generate).parameters:
                 kwargs["on_thinking"] = emit_thinking
             if images and not getattr(accelerator, "supports_vision", False):
                 raise ValueError("attached images require a vision model")
@@ -2194,6 +2220,7 @@ def run_resident_completion(args: argparse.Namespace, *, output_stream=None, err
 
         client = connect_resident(args, error_stream=error_stream)
         ensure_resident_model(client, args, stream=error_stream)
+        configure_chat_reasoning(args, client=client)
         started = time.perf_counter()
         request_options = {
             "options": native_server_options(args),
@@ -3387,6 +3414,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def output_token_argument(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("max-tokens must be -1 or a positive integer") from exc
+    if parsed != -1 and parsed < 1:
+        raise argparse.ArgumentTypeError("max-tokens must be -1 or a positive integer")
+    return parsed
+
+
 def add_native_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "model",
@@ -3413,7 +3450,10 @@ def add_native_run_arguments(parser: argparse.ArgumentParser) -> None:
         help="Local file or directory to use as MachBoost draft context.",
     )
     parser.add_argument("--max-context-chars", type=int, default=200_000)
-    parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument(
+        "--max-tokens", type=output_token_argument, default=-1,
+        help="Output token cap; default -1 runs until EOS, cancellation, or the model context limit.",
+    )
     parser.add_argument(
         "--ctx",
         "--num-ctx",
@@ -3425,8 +3465,8 @@ def add_native_run_arguments(parser: argparse.ArgumentParser) -> None:
         "--think",
         nargs="?",
         const="medium",
-        choices=["low", "medium", "high", "xhigh"],
-        help="Enable reasoning, optionally selecting Muse Glimmer reasoning strength.",
+        choices=["off", "low", "medium", "high", "xhigh"],
+        help="Reasoning defaults to low for reasoning-capable models. Use off to disable it.",
     )
     parser.add_argument(
         "--show-thinking",
