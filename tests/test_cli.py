@@ -3,7 +3,7 @@ import json
 import tempfile
 import types
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -479,6 +479,40 @@ class CLITests(unittest.TestCase):
         self.assertEqual(options["_think"], "high")
         self.assertEqual(options["_reasoning_strength"], "high")
         self.assertTrue(args.show_thinking)
+
+    def test_chat_defaults_are_uncapped_and_capability_aware(self):
+        for command in ("run", "chat", "code", "complete"):
+            for capabilities, expected in ((["chat", "reasoning"], "low"), (["chat"], False)):
+                with self.subTest(command=command, capabilities=capabilities):
+                    args = cli.build_parser().parse_args([command, "example/model"])
+                    client = FakeResidentClient()
+                    client.show = lambda *a, **k: {"preflight": {"capabilities": capabilities}}
+                    cli.configure_chat_reasoning(args, client=client)
+                    options = cli.native_server_options(args)
+                    self.assertEqual(options["num_predict"], -1)
+                    self.assertEqual(options["_think"], expected)
+                    self.assertEqual(args.show_thinking, bool(expected))
+
+    def test_explicit_thinking_and_output_limits_override_defaults(self):
+        for effort in ("off", "low", "medium", "high", "xhigh"):
+            args = cli.build_parser().parse_args(
+                ["run", "example/model", "--think", effort, "--max-tokens", "512"]
+            )
+            cli.configure_chat_reasoning(args)
+            options = cli.native_server_options(args)
+            self.assertEqual(options["num_predict"], 512)
+            self.assertEqual(options["_think"], False if effort == "off" else effort)
+
+    def test_invalid_output_limits_fail_before_loading(self):
+        for value in ("0", "-2", "1.5", "wrong"):
+            with self.subTest(value=value), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    cli.build_parser().parse_args(["run", "example/model", "--max-tokens", value])
+
+    def test_reasoning_only_notice_does_not_invent_a_cap(self):
+        self.assertIn("output cap", cli.reasoning_only_notice(128, 128))
+        self.assertNotIn("output cap", cli.reasoning_only_notice(-1, 256))
+        self.assertNotIn("output cap", cli.reasoning_only_notice(128, 10))
 
     def test_muse_glimmer_bench_parses_no_speculation_control(self):
         args = cli.build_parser().parse_args(
@@ -1540,6 +1574,9 @@ class FakeResidentClient:
     def is_healthy(self):
         return True
 
+    def show(self, model, *, preflight, backend):
+        return {"preflight": {"capabilities": ["chat", "completion"]}}
+
     def chat(self, model, messages, *, options, keep_alive, stream, images=None, machboost=None):
         self.chat_calls.append((model, messages, options, keep_alive, stream, images, machboost))
         backend = "mlx-vlm" if images else "mlx"
@@ -1841,7 +1878,7 @@ class FakeAccelerator:
         cls.calls.append(("mlx", model, kwargs))
         return cls("mlx", model, kwargs)
 
-    def generate_chat(self, messages, max_tokens=128, on_text=None):
+    def generate_chat(self, messages, max_tokens=128, on_text=None, enable_thinking=False):
         self.messages.append((messages, max_tokens))
         if on_text is not None:
             on_text("native ")
