@@ -25,7 +25,7 @@ struct ReasoningOptions {
             : []
     }
 
-    var defaultLevel: ReasoningLevel? { levels.first }
+    var defaultLevel: ReasoningLevel? { levels.contains(.low) ? .low : levels.first }
     var isAvailable: Bool { !levels.isEmpty }
 
     func selection(_ storedValue: String) -> ReasoningLevel? {
