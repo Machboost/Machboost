@@ -817,6 +817,14 @@ class RuntimeManager:
                         max_tokens=max_tokens,
                         truncate=bool(options.get("truncate", options.get("shift", True))),
                     )
+                    if max_tokens < 0:
+                        rendered = render_chat_prompt(
+                            accelerator.service, runtime_messages,
+                            tools=options.get("_tools"), enable_thinking=options.get("_think", False),
+                        )
+                        max_tokens = int(options["num_ctx"]) - len(accelerator.service.encode(rendered))
+                        if max_tokens < 1:
+                            raise ValueError("The prompt fills num_ctx; shorten or summarize it.")
                 chat_kwargs: dict[str, Any] = {
                     "max_tokens": max_tokens,
                     "context": context,
@@ -1010,6 +1018,10 @@ class RuntimeManager:
                         truncate=bool(options.get("truncate", options.get("shift", True))),
                         num_keep=int(options.get("num_keep", 0)),
                     )
+                    if max_tokens < 0:
+                        max_tokens = int(options["num_ctx"]) - len(accelerator.service.encode(runtime_prompt))
+                        if max_tokens < 1:
+                            raise ValueError("The prompt fills num_ctx; shorten or summarize it.")
                 generate_kwargs: dict[str, Any] = {
                     "max_tokens": max_tokens,
                     "context": context,
