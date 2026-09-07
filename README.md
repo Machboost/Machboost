@@ -82,16 +82,16 @@ pip install -e ".[all]"
 Install the current CLI directly from its GitHub release tag:
 
 ```sh
-python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.18"
-python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.18"
-python3 -m pip install "machboost[dflash] @ git+https://github.com/Machboost/Machboost.git@v0.16.18"
+python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
+python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
+python3 -m pip install "machboost[dflash] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
 ```
 
 Update an existing install:
 
 ```sh
 python3 -m pip uninstall -y machboost
-python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.18"
+python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
 machboost version
 ```
 
@@ -234,11 +234,16 @@ machboost ps
 Interactive terminals use a compact green chat layout with separate user,
 answer, reasoning, tool, and performance rows. Redirected output stays plain
 for scripts and logs. Set `NO_COLOR=1` to keep the layout without ANSI colors.
-Reasoning effort is opt-in with `--think low|medium|high|xhigh` or `/think LEVEL`.
-When a model inherently emits a reasoning channel, MachBoost detects and renders
-that channel separately even without the flag. Some reasoning models can spend
-the entire output budget before reaching an answer; increase `--max-tokens` or
-use `/think off` where the model supports disabling reasoning.
+Chat defaults to Low reasoning when the model reports reasoning support, and Off
+otherwise. Use `--think off|low|medium|high|xhigh` or `/think LEVEL` to override it.
+Models with only an on/off thinking switch treat enabled effort levels alike;
+an effort label does not imply an exact reasoning-token budget.
+`run`, `chat`, `code`, and `complete` have no short output cap by default
+(`--max-tokens -1`). Generation ends at EOS, cancellation, or the available model
+context boundary. Set `--max-tokens N` for an explicit total budget, including
+reasoning and the answer. An explicit small budget can end during reasoning.
+This does not make context windows or memory unlimited. Raw completion models
+that do not emit EOS may need Ctrl-C or an explicit cap.
 
 Run a workspace-bounded coding session from the terminal:
 
@@ -290,7 +295,7 @@ MachBoost alias uses the native 4-bit MLX-VLM conversion and recommends at least
 32 GB unified memory. Higher-bit variants require more memory.
 
 ```sh
-python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.18"
+python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
 machboost pull muse-glimmer:30b
 machboost run muse-glimmer:30b --think high --show-thinking --show-stats
 machboost run muse-glimmer:30b --image ./screenshot.png --think medium
@@ -769,9 +774,10 @@ more tool-call rounds. Tool activity is shown in collapsible human-readable
 rows instead of raw model protocol. Approved edits include a bounded patch preview plus Open File
 and Reveal in Finder actions. A trailing `branch -> working tree` panel shows
 the final repository-wide Git diff, while per-message patches retain the change
-history. Model protocol tokens are not shown as messages. Reasoning is disabled
-by default where the model supports that choice. Muse Glimmer always reasons, so
-MachBoost uses its documented `low` setting as the fast default. The composer
+history. Model protocol tokens are not shown as messages. Reasoning-capable models
+default to Low; non-reasoning models do not receive an enabled reasoning setting.
+An explicitly saved Off preference is preserved. Reset settings to restore the
+model-aware default. Muse Glimmer always reasons. The composer
 contains a reasoning-effort selector with Low, Medium, High, and Max (`xhigh`),
 a stepped slider, reset, and a Show reasoning toggle. Models that can disable
 reasoning also offer Off. The selector is hidden when the model lacks reasoning
