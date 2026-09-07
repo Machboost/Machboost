@@ -1,0 +1,54 @@
+{
+  "schema": "machboost.reasoning_latency.v1",
+  "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+  "reasoning": "low",
+  "max_tokens": -1,
+  "measurement": "HTTP client of resident daemon, not desktop UI or Claude",
+  "rows": [
+    {
+      "run": 1,
+      "first_output_s": 0.6838305839337409,
+      "first_answer_s": 7.78477737493813,
+      "wall_s": 9.03332133393269,
+      "load_s": 0.0,
+      "generated_tokens": 622,
+      "decode_s": 8.364071207,
+      "decode_tokens_per_second": 74.36569878547185,
+      "reasoning_characters": 1358,
+      "answer": "**No.** Because there are infinitely many pairs of $x$ and $y$ that satisfy the equation, the value of $x-y$ is not unique.\n\n**Examples:**\n1. If $x=3$ and $y=2$, then $x-y = \\mathbf{1}$.\n2. If $x=4$ and $y=1$, then $x-y = \\mathbf{3}$.",
+      "done_reason": "stop"
+    },
+    {
+      "run": 2,
+      "first_output_s": 0.2863033330067992,
+      "first_answer_s": 7.009443124989048,
+      "wall_s": 8.256775166024454,
+      "load_s": 0.0,
+      "generated_tokens": 595,
+      "decode_s": 7.982816583,
+      "decode_tokens_per_second": 74.53509595436486,
+      "reasoning_characters": 1355,
+      "answer": "**No.** Because there are infinitely many pairs of $x$ and $y$ that satisfy the equation, each resulting in a different value for $x-y$.\n\n**Examples:**\n1. If $x=3$ and $y=2$, then $x-y = \\mathbf{1}$.\n2. If $x=4$ and $y=1$, then $x-y = \\mathbf{3}$.",
+      "done_reason": "stop"
+    },
+    {
+      "run": 3,
+      "first_output_s": 0.28423245903104544,
+      "first_answer_s": 6.972710333997384,
+      "wall_s": 8.202710125013255,
+      "load_s": 0.0,
+      "generated_tokens": 592,
+      "decode_s": 7.929587499,
+      "decode_tokens_per_second": 74.65709913342366,
+      "reasoning_characters": 1312,
+      "answer": "**No.** There are infinitely many pairs of $x$ and $y$ that satisfy the equation, each resulting in a different value for $x-y$.\n\n**Examples:**\n1. If $x=3$ and $y=2$, then $x-y = \\mathbf{1}$.\n2. If $x=4$ and $y=1$, then $x-y = \\mathbf{3}$.",
+      "done_reason": "stop"
+    }
+  ],
+  "summary": {
+    "median_first_output_s": 0.2863033330067992,
+    "median_first_answer_s": 7.009443124989048,
+    "median_wall_s": 8.256775166024454,
+    "median_decode_tokens_per_second": 74.53509595436486
+  }
+}
