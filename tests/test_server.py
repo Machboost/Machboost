@@ -1861,6 +1861,13 @@ class HTTPServerTests(unittest.TestCase):
             response["machboost"]["stats"]["context_truncated_tokens"], 3
         )
 
+    def test_uncapped_generation_respects_explicit_context_window(self):
+        self.request("/api/generate", {
+            "model": "mlx-community/example", "prompt": "one two three",
+            "stream": False, "options": {"num_ctx": 10, "num_predict": -1},
+        })
+        self.assertEqual(self.loaded[0][1].generate_calls[0][1], 7)
+
     def test_ollama_context_overflow_can_fail_instead_of_shift(self):
         with self.assertRaises(HTTPError) as raised:
             self.request(

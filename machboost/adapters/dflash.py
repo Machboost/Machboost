@@ -192,6 +192,13 @@ class DFlashAccelerator:
     ) -> tuple[str, DFlashRunStats]:
         if self._closed:
             raise RuntimeError("DFlash accelerator is closed")
+        if max_tokens < 0:
+            from ..generation import output_token_limit
+
+            max_tokens = output_token_limit(
+                max_tokens, model=self.model, tokenizer=self.tokenizer,
+                prompt_tokens=len(self.tokenizer.encode(prompt)),
+            )
         if max_tokens < 1:
             return "", self._empty_stats()
 

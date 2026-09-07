@@ -65,7 +65,7 @@ struct ChatView: View {
     @AppStorage("machboost.chat.maxTokens") private var maxTokens = 0
     @AppStorage("machboost.chat.optionalOutputLimitMigrated") private var optionalOutputLimitMigrated = false
     @AppStorage("machboost.chat.temperature") private var temperature = 0.2
-    @AppStorage("machboost.chat.reasoningStrength") private var reasoningStrength = "off"
+    @AppStorage("machboost.chat.reasoningStrength") private var reasoningStrength = "auto"
     @AppStorage("machboost.chat.extensionToolsEnabled") private var extensionToolsEnabled = false
     @AppStorage("machboost.chat.repositoryContextEnabled") private var repositoryContextEnabled = false
     @AppStorage("machboost.chat.showReasoning") private var showReasoning = true
@@ -2317,7 +2317,7 @@ struct ChatView: View {
     private func resetGenerationControls() {
         maxTokens = 0
         temperature = 0.2
-        reasoningStrength = "off"
+        reasoningStrength = "auto"
         showReasoning = true
         autoSummarize = true
         summaryThreshold = 90
