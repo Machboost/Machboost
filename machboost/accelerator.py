@@ -259,6 +259,12 @@ class Accelerator:
         generation_options: Optional[dict[str, Any]] = None,
     ) -> AcceleratorResult:
         prompt_tokens = self.service.encode(prompt)
+        from .generation import output_token_limit
+
+        max_tokens = output_token_limit(
+            max_tokens, model=getattr(self.service, "model", None),
+            tokenizer=getattr(self.service, "tokenizer", None), prompt_tokens=len(prompt_tokens),
+        )
         token_streamer = self._on_tokens(on_text)
         run_context_tokens = self.context_tokens + self._encode_many(resolve_context(context))
         if generation_options or not self.boost_enabled or (not run_context_tokens and callable(getattr(self.service, "generate_tokens", None))):
