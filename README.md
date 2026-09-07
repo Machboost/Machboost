@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[Website](https://machboost.github.io/Machboost/) · [Download for macOS](https://github.com/Machboost/Machboost/releases/latest) · [Source](https://github.com/Machboost/Machboost)
+[Website](https://machboost.xyz) · [Download for macOS](https://github.com/Machboost/Machboost/releases/latest) · [PyPI](https://pypi.org/project/machboost/) · [Source](https://github.com/Machboost/Machboost)
 
 MachBoost is an alpha-stage, local-first inference server, team gateway, native macOS app, and Python package for MLX, MLX-VLM, and Hugging Face models. It offers an Ollama-like model workflow, keeps models resident between requests, and streams text and visual chat. Team Mode adds scoped employee keys, fair admission, revision-aware private/shared memory, exact-request reuse, local traces, evaluations, and budgeted external-provider fallback. Optional acceleration paths target fresh text decoding on selected Qwen models, reusable local text, repeated image inputs, and selected Qwen3-VL visual-prefill workloads. Muse Glimmer runs through its native Hugging Face MLX-VLM conversions; Ollama is not required for that path.
 
@@ -59,45 +59,54 @@ Treat every workload as uncalibrated until it passes a same-model paired benchma
 
 ## Install
 
-From a local checkout or downloaded source archive:
+### Python Package and CLI
+
+Use a virtual environment on an Apple Silicon Mac with a current Python 3.13:
+
+```sh
+python3 -m venv ~/.venvs/machboost
+source ~/.venvs/machboost/bin/activate
+python -m pip install --upgrade "machboost[mlx]"
+machboost run llama3.2:3b
+```
+
+The `mlx` extra installs native text and vision inference dependencies. Plain
+`machboost` installs the base package without those backends. Model weights
+download separately when requested; they are not included in the package.
+For a standalone CLI environment, `pipx install "machboost[mlx]"` is another
+option when pipx is installed. The DMG below does not need Python or pip.
+
+Other optional backends:
+
+```sh
+python -m pip install "machboost[hf]"
+python -m pip install "machboost[vision]"
+python -m pip install "machboost[dflash]"
+```
+
+Update inside the same environment:
+
+```sh
+python -m pip install --upgrade "machboost[mlx]"
+machboost version
+```
+
+If migrating from an editable source checkout, uninstall `machboost` from that
+environment first so the old checkout no longer takes precedence. For pipx,
+use `pipx upgrade machboost`. PyPI releases use a protected publishing workflow;
+see [the maintainer guide](docs/pypi-publishing.md).
+
+### From Source
 
 ```sh
 cd machboost
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e ".[mlx]"
 ```
 
-Install optional backends as needed:
-
-```sh
-pip install -e ".[mlx]"
-pip install -e ".[hf]"
-pip install -e ".[vision]"
-pip install -e ".[dflash]"
-pip install -e ".[video]"
-pip install -e ".[all]"
-```
-
-Install the current CLI directly from its GitHub release tag:
-
-```sh
-python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
-python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
-python3 -m pip install "machboost[dflash] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
-```
-
-Update an existing install:
-
-```sh
-python3 -m pip uninstall -y machboost
-python3 -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
-machboost version
-```
-
-The explicit uninstall removes stale editable installs that otherwise continue
-loading code from an older checkout. MachBoost is not currently distributed on
-PyPI; the native app and tagged GitHub source are the supported release paths.
+An exact tagged source release can also be installed with
+`python -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.20"`.
 
 Check the install:
 
@@ -295,7 +304,7 @@ MachBoost alias uses the native 4-bit MLX-VLM conversion and recommends at least
 32 GB unified memory. Higher-bit variants require more memory.
 
 ```sh
-python3 -m pip install "machboost[vision] @ git+https://github.com/Machboost/Machboost.git@v0.16.19"
+python3 -m pip install --upgrade "machboost[vision]"
 machboost pull muse-glimmer:30b
 machboost run muse-glimmer:30b --think high --show-thinking --show-stats
 machboost run muse-glimmer:30b --image ./screenshot.png --think medium
