@@ -567,6 +567,14 @@ class MLXVLMAccelerator:
             observed_generation_steps: set[int] = set()
             last: Any = None
             stream_image: Optional[list[str]] = list(images) or None
+            if max_tokens < 0:
+                from ..generation import output_token_limit
+
+                tokenizer = getattr(self.processor, "tokenizer", self.processor)
+                max_tokens = output_token_limit(
+                    max_tokens, model=self.model, tokenizer=tokenizer,
+                    prompt_tokens=len(tokenizer.encode(prompt)),
+                )
             stream_options: dict[str, Any] = {
                 "max_tokens": max_tokens,
                 "temperature": temperature,
