@@ -21,7 +21,8 @@ final class MachBoostTests: XCTestCase {
         let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: false)
         XCTAssertTrue(options.isAvailable)
         XCTAssertEqual(options.levels, [.off, .low, .medium, .high, .xhigh])
-        XCTAssertEqual(options.defaultLevel, .off)
+        XCTAssertEqual(options.defaultLevel, .low)
+        XCTAssertEqual(options.selection("auto"), .low)
         XCTAssertNil(options.strength("off"))
         for level in options.levels {
             XCTAssertEqual(options.selection(level.rawValue), level)
@@ -39,11 +40,11 @@ final class MachBoostTests: XCTestCase {
         XCTAssertEqual(options.strength("high"), "high")
     }
 
-    func testInvalidOptionalReasoningPreferenceDefaultsToOff() {
+    func testInvalidOptionalReasoningPreferenceDefaultsToLow() {
         let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: false)
-        XCTAssertEqual(options.selection(""), .off)
-        XCTAssertEqual(options.selection("unsupported"), .off)
-        XCTAssertNil(options.strength("unsupported"))
+        XCTAssertEqual(options.selection(""), .low)
+        XCTAssertEqual(options.selection("unsupported"), .low)
+        XCTAssertEqual(options.strength("unsupported"), "low")
     }
 
     #if !SWIFT_PACKAGE
