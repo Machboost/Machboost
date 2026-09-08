@@ -4000,10 +4000,14 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         )
         if claude_code:
             selected_tools = compact_claude_code_tools(selected_tools)
-        tools = anthropic_tools(selected_tools)
+        active_tools = [] if repeated_calls else selected_tools
+        tools = anthropic_tools(active_tools)
         if tools:
             translated["tools"] = tools
             translated["tool_choice"] = compatibility_tool_choice(payload.get("tool_choice"))
+        elif repeated_calls:
+            translated["tools"] = []
+            translated["tool_choice"] = "none"
         if not translated.get("affinity_key") and not (
             isinstance(translated.get("machboost_options"), dict)
             and translated["machboost_options"].get("affinity_key")
@@ -4025,9 +4029,25 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             messages = compact_claude_code_messages(
                 messages,
                 selected_tool_names={
-                    str(tool.get("name") or "") for tool in selected_tools
+                    str(tool.get("name") or "") for tool in active_tools
                 },
             )
+        if repeated_calls:
+            descriptions = ", ".join(
+                f"{name}({arguments})" for name, arguments in sorted(repeated_calls)
+            )
+            recovery = (
+                "Tool-loop recovery: these unchanged calls already completed twice: "
+                f"{descriptions[:2_000]}. Tools are disabled for this response. "
+                "Answer the user's original request now using the existing tool results."
+            )
+            if messages and messages[0].get("role") == "system":
+                messages[0] = {
+                    **messages[0],
+                    "content": f"{messages[0].get('content') or ''}\n\n{recovery}",
+                }
+            else:
+                messages.insert(0, {"role": "system", "content": recovery})
         prepared = self.prepare_compat_chat(
             payload,
             self.apply_skill_instructions(
