@@ -221,6 +221,30 @@ class ToolCallParsingTests(unittest.TestCase):
         self.assertEqual(content, "I'm doing great, thanks!")
         self.assertEqual(calls, [])
 
+    def test_extract_tool_calls_removes_gemma_tool_response_marker(self):
+        content, calls = extract_tool_calls("<|tool_response>")
+
+        self.assertEqual(content, "")
+        self.assertEqual(calls, [])
+
+        emitted = []
+        stream = ToolAwareTextStream(emitted.append)
+        for chunk in ("<|tool_", "response>", "Continuing from the result."):
+            stream.feed(chunk)
+        self.assertEqual("".join(emitted), "Continuing from the result.")
+
+    def test_extract_tool_calls_removes_split_bare_turn_marker(self):
+        content, calls = extract_tool_calls("Done.<turn|>")
+
+        self.assertEqual(content, "Done.")
+        self.assertEqual(calls, [])
+
+        emitted = []
+        stream = ToolAwareTextStream(emitted.append)
+        for chunk in ("Done.", "<tu", "rn|>"):
+            stream.feed(chunk)
+        self.assertEqual("".join(emitted), "Done.")
+
     def test_extracts_muse_attribute_call_without_exposing_control_tokens(self):
         content, calls = extract_tool_calls(
             '<|start|>assistant to=list_files<|message|>'
@@ -2318,6 +2342,91 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(response["stop_reason"], "tool_use")
         self.assertEqual([call["name"] for call in calls], ["read_file", "search_repo"])
         self.assertEqual(calls[0]["input"]["path"], "a.py")
+
+    def test_claude_code_stops_a_third_identical_successful_tool_call(self):
+        messages = [{"role": "user", "content": "Inspect the repository"}]
+        for index in range(2):
+            call_id = f"tool_{index}"
+            messages.extend(
+                [
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": call_id,
+                                "name": "read_file",
+                                "input": {"path": "a.py"},
+                            },
+                            {
+                                "type": "tool_use",
+                                "id": f"search_{index}",
+                                "name": "search_repo",
+                                "input": {"query": "cancel"},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": call_id,
+                                "content": "file contents",
+                            },
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": f"search_{index}",
+                                "content": "search results",
+                            },
+                        ],
+                    },
+                ]
+            )
+
+        payload = {
+            "model": "mlx-community/tool-calling",
+            "messages": messages,
+            "max_tokens": 64,
+            "tools": [
+                {"name": "read_file", "input_schema": {"type": "object"}},
+                {"name": "search_repo", "input_schema": {"type": "object"}},
+            ],
+        }
+        _, _, body = self.request(
+            "/v1/messages",
+            payload,
+            headers={"User-Agent": "claude-cli/2.0"},
+        )
+
+        response = json.loads(body)
+        self.assertEqual(response["stop_reason"], "end_turn")
+        self.assertEqual(
+            [block["type"] for block in response["content"]],
+            ["text"],
+        )
+        self.assertIn("stopped an unchanged tool call", response["content"][0]["text"])
+        forwarded_messages, _, _, forwarded_tools = self.loaded[-1][1].chat_calls[0]
+        self.assertFalse(forwarded_tools)
+        self.assertIn("Tool-loop recovery", forwarded_messages[0]["content"])
+
+        _, _, body = self.request(
+            "/v1/messages",
+            {**payload, "stream": True},
+            headers={"User-Agent": "claude-cli/2.0"},
+        )
+        events = [
+            json.loads(line.removeprefix("data: "))
+            for line in body.splitlines()
+            if line.startswith("data: ")
+        ]
+        block_types = [
+            event["content_block"]["type"]
+            for event in events
+            if event["type"] == "content_block_start"
+        ]
+        self.assertEqual(block_types, ["text"])
+        self.assertNotIn("tool_use", block_types)
 
     def test_anthropic_messages_endpoint_accepts_prior_thinking_blocks(self):
         status, _, _ = self.request(
