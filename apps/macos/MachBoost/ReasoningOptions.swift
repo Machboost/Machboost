@@ -1,7 +1,7 @@
 import Foundation
 
 enum ReasoningLevel: String, CaseIterable, Identifiable {
-    case off, low, medium, high, xhigh
+    case off, low, medium, high
 
     var id: String { rawValue }
 
@@ -11,7 +11,6 @@ enum ReasoningLevel: String, CaseIterable, Identifiable {
         case .low: "Low"
         case .medium: "Medium"
         case .high: "High"
-        case .xhigh: "Max"
         }
     }
 }
