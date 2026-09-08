@@ -1371,7 +1371,10 @@ struct ChatView: View {
     }
 
     private var selectedModel: CatalogModel? {
-        appState.model(named: conversation.model)
+        appState.model(
+            named: conversation.model,
+            preferredHostID: conversation.preferredInferenceHostID
+        )
     }
 
     private var selectedModelRequiresReasoning: Bool {
@@ -1662,7 +1665,11 @@ struct ChatView: View {
         guard !text.isEmpty, !isGenerating else { return }
         cancelCodingPrefixPreparation()
         let images = conversation.orderedAttachments.filter { $0.kind == .image }
-        if !images.isEmpty, appState.model(named: conversation.model)?.supportsVision != true {
+        if !images.isEmpty,
+           appState.model(
+               named: conversation.model,
+               preferredHostID: conversation.preferredInferenceHostID
+           )?.supportsVision != true {
             appState.presentedError = "\(conversation.model) cannot read images. Choose a vision model first."
             return
         }

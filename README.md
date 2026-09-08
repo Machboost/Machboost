@@ -245,8 +245,9 @@ answer, reasoning, tool, and performance rows. Redirected output stays plain
 for scripts and logs. Set `NO_COLOR=1` to keep the layout without ANSI colors.
 Chat defaults to Low reasoning when the model reports reasoning support, and Off
 otherwise. Use `--think off|low|medium|high|xhigh` or `/think LEVEL` to override it.
-Models with only an on/off thinking switch treat enabled effort levels alike;
-an effort label does not imply an exact reasoning-token budget.
+These are MachBoost requests, not capabilities guaranteed by every model. Models
+with only an on/off thinking switch treat enabled effort levels alike; `xhigh`
+removes MachBoost's explicit thinking budget only on adapters that expose one.
 `run`, `chat`, `code`, and `complete` have no short output cap by default
 (`--max-tokens -1`). Generation ends at EOS, cancellation, or the available model
 context boundary. Set `--max-tokens N` for an explicit total budget, including
@@ -787,10 +788,12 @@ history. Model protocol tokens are not shown as messages. Reasoning-capable mode
 default to Low; non-reasoning models do not receive an enabled reasoning setting.
 An explicitly saved Off preference is preserved. Reset settings to restore the
 model-aware default. Muse Glimmer always reasons. The composer
-contains a reasoning-effort selector with Low, Medium, High, and Max (`xhigh`),
+contains a conservative reasoning-effort selector with Low, Medium, and High,
 a stepped slider, reset, and a Show reasoning toggle. Models that can disable
 reasoning also offer Off. The selector is hidden when the model lacks reasoning
 support or the selected paid-first route has no locally verified capabilities.
+Some processors only expose an on/off thinking switch and may treat all enabled
+effort choices alike; the app does not claim a universal Max tier.
 Throughput shown in chat uses total model tokens divided by backend decode time
 across the complete assistant turn, including hidden reasoning, tool protocol,
 and follow-up rounds. It is not a visible-word rate.
@@ -917,7 +920,7 @@ machboost run qwen3-vl:4b --image ./invoice.png --show-stats
 machboost run qwen3.5:4b --image ./invoice.png --show-stats
 ```
 
-The interactive session keeps the model and attached image warm. Use `/image PATH` to attach another image, `/video PATH` to attach selected video frames, `/images` to inspect attachments, and `/clear-images` to remove them. The same path is available to Python applications:
+The interactive session keeps the model and attached image warm. Use `/image PATH` to attach another image, `/video PATH` to attach selected video frames, `/images` to inspect attachments, and `/clear-images` to remove them. GIF files are accepted as images, but the current image path reads the first frame only; use `/video` with a supported video file when temporal motion matters. The same path is available to Python applications:
 
 ```python
 from machboost import MachBoostClient, ensure_server

@@ -901,8 +901,30 @@ final class AppState {
         await daemon.shutdown(endpoint: configuration.endpoint, apiToken: apiToken)
     }
 
-    func model(named name: String) -> CatalogModel? {
-        activeCatalog.first { $0.name == name || $0.repository == name }
+    func model(named name: String, preferredHostID: String? = nil) -> CatalogModel? {
+        let catalogs: [[CatalogModel]]
+        if preferredHostID == InferenceHostOption.localID {
+            catalogs = [catalog]
+        } else if let preferredHostID,
+                  let hostID = UUID(uuidString: preferredHostID),
+                  let snapshot = teamHostSnapshots[hostID] {
+            catalogs = [snapshot.catalog, catalog, teamCatalog]
+        } else if inferenceMode == .team, hasOnlineTeamHost {
+            // Automatic routing can still fall back to this Mac, so capability
+            // checks must consider both the remote pool and the local catalog.
+            catalogs = [teamCatalog, catalog]
+        } else {
+            catalogs = [catalog, teamCatalog]
+        }
+
+        let identifier = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return catalogs.lazy.compactMap { models in
+            models.first { model in
+                [model.name, model.repository, model.sourceRepository]
+                    .compactMap { $0 }
+                    .contains { $0.caseInsensitiveCompare(identifier) == .orderedSame }
+            }
+        }.first
     }
 
     func searchHubModels(query: String, limit: Int = 16) async -> [CatalogModel] {
