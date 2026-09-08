@@ -607,6 +607,19 @@ class StreamingToolCallingAccelerator(FakeAccelerator):
         return "".join(chunks), FakeStats(generated_tokens=18)
 
 
+class MultiRoundToolAccelerator(FakeAccelerator):
+    def generate_chat(self, messages, *, max_tokens, on_text=None, tools=None, **_kwargs):
+        self.chat_calls.append((messages, max_tokens, None, tools))
+        if any(message.get("role") == "tool" for message in messages):
+            if on_text is not None:
+                on_text("Finished after the tool result.")
+            return "Finished after the tool result.", FakeStats(generated_tokens=6)
+        return (
+            '<tool_call>{"name":"read_file","arguments":{"path":"a.py"}}</tool_call>',
+            FakeStats(generated_tokens=8),
+        )
+
+
 class FakeVisionAccelerator:
     def __init__(self) -> None:
         self.chat_calls = []
@@ -1466,6 +1479,8 @@ class HTTPServerTests(unittest.TestCase):
             accelerator = TailDroppingAccelerator()
         elif config.model.endswith("streaming-tool-calling"):
             accelerator = StreamingToolCallingAccelerator()
+        elif config.model.endswith("multi-round-tool"):
+            accelerator = MultiRoundToolAccelerator()
         elif config.model.endswith("tool-calling"):
             accelerator = ToolCallingAccelerator()
         elif config.backend == "ollama-mlx":
@@ -2347,6 +2362,104 @@ class HTTPServerTests(unittest.TestCase):
         self.assertNotIn("I should inspect the repository.", str(forwarded))
         self.assertIn("list_files", str(forwarded))
         self.assertIn("README.md", str(forwarded))
+
+    def test_anthropic_reports_output_limit_instead_of_ending_the_agent_turn(self):
+        payload = {
+            "model": "mlx-community/example",
+            "messages": [{"role": "user", "content": "Keep writing"}],
+            "max_tokens": 2,
+        }
+
+        _, _, body = self.request("/v1/messages", payload)
+        self.assertEqual(json.loads(body)["stop_reason"], "max_tokens")
+
+        _, _, body = self.request("/v1/messages", {**payload, "stream": True})
+        events = [
+            json.loads(line.removeprefix("data: "))
+            for line in body.splitlines()
+            if line.startswith("data: ")
+        ]
+        message_delta = next(
+            event for event in events if event["type"] == "message_delta"
+        )
+        self.assertEqual(message_delta["delta"]["stop_reason"], "max_tokens")
+
+    def test_anthropic_adaptive_reasoning_stream_has_a_signature(self):
+        _, _, body = self.request(
+            "/v1/messages",
+            {
+                "model": "muse-glimmer:30b-mlx",
+                "messages": [{"role": "user", "content": "Check the evidence"}],
+                "max_tokens": 32,
+                "thinking": {"type": "adaptive", "budget_tokens": 2_048},
+                "stream": True,
+            },
+        )
+
+        events = [
+            json.loads(line.removeprefix("data: "))
+            for line in body.splitlines()
+            if line.startswith("data: ")
+        ]
+        delta_types = [
+            event.get("delta", {}).get("type")
+            for event in events
+            if event.get("type") == "content_block_delta"
+        ]
+        self.assertIn("thinking_delta", delta_types)
+        self.assertIn("signature_delta", delta_types)
+        signature = next(
+            event["delta"]["signature"]
+            for event in events
+            if event.get("delta", {}).get("type") == "signature_delta"
+        )
+        self.assertTrue(signature.startswith("machboost-v1:"))
+        call = self.loaded[-1][1].chat_calls[0]
+        self.assertTrue(call["enable_thinking"])
+        self.assertEqual(call["reasoning_strength"], "medium")
+
+    def test_anthropic_tool_result_continues_to_a_final_agent_answer(self):
+        tools = [
+            {
+                "name": "read_file",
+                "description": "Read a file",
+                "input_schema": {"type": "object"},
+            }
+        ]
+        first_payload = {
+            "model": "mlx-community/multi-round-tool",
+            "messages": [{"role": "user", "content": "Inspect a.py"}],
+            "max_tokens": 32,
+            "tools": tools,
+        }
+        _, _, first_body = self.request("/v1/messages", first_payload)
+        first = json.loads(first_body)
+        call = next(block for block in first["content"] if block["type"] == "tool_use")
+        self.assertEqual(first["stop_reason"], "tool_use")
+
+        _, _, second_body = self.request(
+            "/v1/messages",
+            {
+                **first_payload,
+                "messages": [
+                    *first_payload["messages"],
+                    {"role": "assistant", "content": first["content"]},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": call["id"],
+                                "content": "print('ok')",
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+        second = json.loads(second_body)
+        self.assertEqual(second["stop_reason"], "end_turn")
+        self.assertEqual(second["content"][-1]["text"], "Finished after the tool result.")
 
     def test_claude_code_uses_compact_session_scoped_agent_cache_lane(self):
         payload = {
