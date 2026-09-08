@@ -233,6 +233,18 @@ class ToolCallParsingTests(unittest.TestCase):
             stream.feed(chunk)
         self.assertEqual("".join(emitted), "Continuing from the result.")
 
+    def test_extract_tool_calls_removes_split_bare_turn_marker(self):
+        content, calls = extract_tool_calls("Done.<turn|>")
+
+        self.assertEqual(content, "Done.")
+        self.assertEqual(calls, [])
+
+        emitted = []
+        stream = ToolAwareTextStream(emitted.append)
+        for chunk in ("Done.", "<tu", "rn|>"):
+            stream.feed(chunk)
+        self.assertEqual("".join(emitted), "Done.")
+
     def test_extracts_muse_attribute_call_without_exposing_control_tokens(self):
         content, calls = extract_tool_calls(
             '<|start|>assistant to=list_files<|message|>'
