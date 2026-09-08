@@ -634,10 +634,17 @@ def anthropic_body(
     tool_calls: Sequence[dict[str, Any]],
     usage: dict[str, int],
     metadata: dict[str, Any],
+    stop_reason: str | None = None,
 ) -> dict[str, Any]:
     content: list[dict[str, Any]] = []
     if thinking:
-        content.append({"type": "thinking", "thinking": thinking, "signature": ""})
+        content.append(
+            {
+                "type": "thinking",
+                "thinking": thinking,
+                "signature": anthropic_thinking_signature(thinking),
+            }
+        )
     if text:
         content.append({"type": "text", "text": text})
     for call in tool_calls:
@@ -661,7 +668,7 @@ def anthropic_body(
         "role": "assistant",
         "model": model,
         "content": content,
-        "stop_reason": "tool_use" if tool_calls else "end_turn",
+        "stop_reason": stop_reason or ("tool_use" if tool_calls else "end_turn"),
         "stop_sequence": None,
         "usage": {
             "input_tokens": usage.get("prompt_tokens", 0),
@@ -669,6 +676,29 @@ def anthropic_body(
         },
         "machboost": metadata,
     }
+
+
+def anthropic_thinking_signature(thinking: str) -> str:
+    """Return an opaque integrity marker for locally generated reasoning."""
+    digest = hashlib.sha256(thinking.encode("utf-8")).digest()
+    encoded = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return f"machboost-v1:{encoded}"
+
+
+def anthropic_stop_reason(done_reason: str, *, has_tool_calls: bool) -> str:
+    if has_tool_calls:
+        return "tool_use"
+    normalized = str(done_reason or "stop").strip().lower()
+    if normalized in {"length", "max_tokens"}:
+        return "max_tokens"
+    if normalized in {
+        "model_context_window_exceeded",
+        "pause_turn",
+        "refusal",
+        "stop_sequence",
+    }:
+        return normalized
+    return "end_turn"
 
 
 def _responses_content(content: Any) -> Any:
