@@ -2406,6 +2406,9 @@ class HTTPServerTests(unittest.TestCase):
             ["text"],
         )
         self.assertIn("stopped an unchanged tool call", response["content"][0]["text"])
+        forwarded_messages, _, _, forwarded_tools = self.loaded[-1][1].chat_calls[0]
+        self.assertFalse(forwarded_tools)
+        self.assertIn("Tool-loop recovery", forwarded_messages[0]["content"])
 
         _, _, body = self.request(
             "/v1/messages",
