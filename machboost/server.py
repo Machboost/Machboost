@@ -3995,6 +3995,9 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             payload,
             self.headers.get("User-Agent", ""),
         )
+        repeated_calls = (
+            repeated_completed_anthropic_calls(payload) if claude_code else set()
+        )
         if claude_code:
             selected_tools = compact_claude_code_tools(selected_tools)
         tools = anthropic_tools(selected_tools)
@@ -4050,6 +4053,17 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 input_data=prepared.messages,
             )
             content, tool_calls = result_content_and_tool_calls(result)
+            suppressed = [
+                call for call in tool_calls if tool_call_signature(call) in repeated_calls
+            ]
+            tool_calls = [
+                call for call in tool_calls if tool_call_signature(call) not in repeated_calls
+            ]
+            if suppressed and not tool_calls and not content:
+                content = (
+                    "MachBoost stopped an unchanged tool call that already completed "
+                    "twice. Continue from the existing result instead of rerunning it."
+                )
             self.remember_exchange(
                 prepared.memory,
                 prepared.workspace,
@@ -4084,6 +4098,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         streamed_thinking = ""
         thinking_block_text = ""
         streamed_text = ""
+        suppressed_calls: list[dict[str, Any]] = []
 
         def event(event_type: str, **values: Any) -> None:
             self.write_named_sse(event_type, {"type": event_type, **values})
@@ -4168,6 +4183,9 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
         def emit_tool(call: dict[str, Any]) -> None:
             nonlocal thinking_index, text_index, next_block_index
+            if tool_call_signature(call) in repeated_calls:
+                suppressed_calls.append(call)
+                return
             close_thinking()
             if text_index is not None:
                 event("content_block_stop", index=text_index)
@@ -4223,10 +4241,26 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             return
 
         content, tool_calls = result_content_and_tool_calls(result)
+        final_suppressed = [
+            call for call in tool_calls if tool_call_signature(call) in repeated_calls
+        ]
+        tool_calls = [
+            call for call in tool_calls if tool_call_signature(call) not in repeated_calls
+        ]
         if remaining := stream_remainder(result.thinking, streamed_thinking):
             emit_thinking(remaining)
         if remaining := stream_remainder(content, streamed_text):
             emit(remaining)
+        if (
+            (suppressed_calls or final_suppressed)
+            and not tool_calls
+            and not streamed_text
+            and not content
+        ):
+            emit(
+                "MachBoost stopped an unchanged tool call that already completed "
+                "twice. Continue from the existing result instead of rerunning it."
+            )
         close_thinking()
         if text_index is not None:
             event("content_block_stop", index=text_index)
@@ -5980,7 +6014,7 @@ def extract_tool_calls(text: str) -> tuple[str, list[dict[str, Any]]]:
         flags=re.I,
     )
     content = re.sub(
-        r"<\|(?:start|message|end|call|channel|eom|eot)\|>",
+        r"<\|(?:start|message|end|call|channel|eom|eot|tool_response)\|?>",
         "",
         content,
         flags=re.I,
@@ -6004,6 +6038,7 @@ class ToolAwareTextStream:
         "<atem:function_calls>": "</atem:function_calls>",
         "<|tool_call>": "<tool_call|>",
     }
+    _tool_response_markers = ("<|tool_response>", "<|tool_response|>")
 
     def __init__(
         self,
@@ -6114,13 +6149,31 @@ class ToolAwareTextStream:
                 self._prose(self._pending[:marker])
                 self._pending = self._pending[marker:]
             lower = self._pending.lower()
+            matched_response_marker = next(
+                (
+                    marker
+                    for marker in self._tool_response_markers
+                    if lower.startswith(marker)
+                ),
+                None,
+            )
+            if matched_response_marker is not None:
+                self._pending = self._pending[len(matched_response_marker):]
+                continue
             for start, end in self._tool_markers.items():
                 if lower.startswith(start):
                     self._tool_end = end
                     break
             if self._tool_end:
                 continue
-            if any(start.startswith(lower) for start in (*self._tool_markers, "<|")):
+            if any(
+                start.startswith(lower)
+                for start in (
+                    *self._tool_markers,
+                    *self._tool_response_markers,
+                    "<|",
+                )
+            ):
                 return
             if lower.startswith("<|"):
                 end = lower.find("|>")
@@ -6179,6 +6232,61 @@ def result_content_and_tool_calls(
             }
         )
     return content, calls
+
+
+def tool_call_signature(call: dict[str, Any]) -> tuple[str, str]:
+    function = dict(call.get("function") or {})
+    name = str(function.get("name") or "").strip()
+    arguments: Any = function.get("arguments") or {}
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            arguments = arguments.strip()
+    try:
+        encoded = json.dumps(
+            arguments,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    except TypeError:
+        encoded = str(arguments)
+    return name, encoded
+
+
+def repeated_completed_anthropic_calls(payload: dict[str, Any]) -> set[tuple[str, str]]:
+    """Find unchanged successful calls already executed twice in this agent turn."""
+    calls_by_id: dict[str, tuple[str, str]] = {}
+    completed: dict[tuple[str, str], int] = {}
+    raw_messages = payload.get("messages")
+    if not isinstance(raw_messages, list):
+        return set()
+    for message in raw_messages:
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "tool_use":
+                call_id = str(part.get("id") or "")
+                if call_id:
+                    calls_by_id[call_id] = tool_call_signature(
+                        {
+                            "function": {
+                                "name": str(part.get("name") or ""),
+                                "arguments": part.get("input") or {},
+                            }
+                        }
+                    )
+            elif part.get("type") == "tool_result" and not bool(part.get("is_error")):
+                signature = calls_by_id.get(str(part.get("tool_use_id") or ""))
+                if signature is not None:
+                    completed[signature] = completed.get(signature, 0) + 1
+    return {signature for signature, count in completed.items() if count >= 2}
 
 
 def stream_remainder(final: str, streamed: str) -> str:
