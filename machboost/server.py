@@ -6019,6 +6019,7 @@ def extract_tool_calls(text: str) -> tuple[str, list[dict[str, Any]]]:
         content,
         flags=re.I,
     )
+    content = re.sub(r"<(?:turn|end_turn)\|>", "", content, flags=re.I)
     content = re.sub(r"<tool_call\b[^>]*(?:>.*)?$", "", content, flags=re.S | re.I)
     content = re.sub(r"<\|tool_call>.*$", "", content, flags=re.S | re.I)
     content = re.sub(
@@ -6039,6 +6040,7 @@ class ToolAwareTextStream:
         "<|tool_call>": "<tool_call|>",
     }
     _tool_response_markers = ("<|tool_response>", "<|tool_response|>")
+    _bare_control_markers = ("<turn|>", "<end_turn|>")
 
     def __init__(
         self,
@@ -6160,6 +6162,17 @@ class ToolAwareTextStream:
             if matched_response_marker is not None:
                 self._pending = self._pending[len(matched_response_marker):]
                 continue
+            matched_bare_marker = next(
+                (
+                    marker
+                    for marker in self._bare_control_markers
+                    if lower.startswith(marker)
+                ),
+                None,
+            )
+            if matched_bare_marker is not None:
+                self._pending = self._pending[len(matched_bare_marker):]
+                continue
             for start, end in self._tool_markers.items():
                 if lower.startswith(start):
                     self._tool_end = end
@@ -6171,6 +6184,7 @@ class ToolAwareTextStream:
                 for start in (
                     *self._tool_markers,
                     *self._tool_response_markers,
+                    *self._bare_control_markers,
                     "<|",
                 )
             ):
