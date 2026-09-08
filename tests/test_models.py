@@ -135,6 +135,26 @@ class ModelCatalogTests(unittest.TestCase):
         self.assertEqual(resolution.backend, "mlx")
         self.assertIsNone(resolution.alias)
 
+    def test_cached_gemma4_config_selects_mlx_vlm_without_vision_in_repo_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot = Path(directory)
+            snapshot.joinpath("config.json").write_text(
+                json.dumps(
+                    {
+                        "model_type": "gemma4",
+                        "architectures": ["Gemma4ForConditionalGeneration"],
+                        "vision_config": {"model_type": "gemma4_vision"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("machboost.models.cached_repo_path", return_value=snapshot):
+                resolution = resolve_model(
+                    "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit"
+                )
+
+        self.assertEqual(resolution.backend, "mlx-vlm")
+
     def test_explicit_dflash_backend_resolves_mlx_target_for_hybrid_alias(self):
         resolution = resolve_model("qwen3.5:9b", backend="dflash")
 
