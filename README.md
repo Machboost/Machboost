@@ -106,7 +106,7 @@ python -m pip install -e ".[mlx]"
 ```
 
 An exact tagged source release can also be installed with
-`python -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.20"`.
+`python -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.21"`.
 
 Check the install:
 

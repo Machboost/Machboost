@@ -55,6 +55,8 @@ from .protocols import (
     anthropic_body,
     anthropic_cache_affinity,
     anthropic_messages,
+    anthropic_stop_reason,
+    anthropic_thinking_signature,
     anthropic_tools,
     claude_code_session_title,
     compact_claude_code_messages,
@@ -896,7 +898,7 @@ class RuntimeManager:
                 for call in (stats.get("tool_calls") or ())
                 if isinstance(call, dict)
             ),
-            done_reason=str(stats.get("done_reason") or "stop"),
+            done_reason=generation_done_reason(stats, max_tokens),
         )
 
     def generate(
@@ -1085,7 +1087,7 @@ class RuntimeManager:
                 for call in (stats.get("tool_calls") or ())
                 if isinstance(call, dict)
             ),
-            done_reason=str(stats.get("done_reason") or "stop"),
+            done_reason=generation_done_reason(stats, max_tokens),
         )
 
     def embed(
@@ -4008,8 +4010,13 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 selected_tools,
             )
         thinking = payload.get("thinking")
-        if isinstance(thinking, dict) and thinking.get("type") == "enabled":
-            translated["reasoning_effort"] = "high"
+        if isinstance(thinking, dict) and thinking.get("type") in {"enabled", "adaptive"}:
+            budget = _optional_int(thinking.get("budget_tokens"))
+            translated["reasoning_effort"] = (
+                "low" if budget is not None and budget <= 1_024
+                else "medium" if budget is not None and budget <= 4_096
+                else "high"
+            )
         messages = anthropic_messages(payload)
         if claude_code:
             messages = compact_claude_code_messages(
@@ -4062,6 +4069,10 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                         workspace=prepared.workspace,
                         memory=prepared.memory,
                     ),
+                    stop_reason=anthropic_stop_reason(
+                        result.done_reason,
+                        has_tool_calls=bool(tool_calls),
+                    ),
                 )
             )
             return
@@ -4071,6 +4082,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         thinking_index: Optional[int] = None
         text_index: Optional[int] = None
         streamed_thinking = ""
+        thinking_block_text = ""
         streamed_text = ""
 
         def event(event_type: str, **values: Any) -> None:
@@ -4095,7 +4107,8 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             )
 
         def emit_thinking(text: str) -> None:
-            nonlocal thinking_index, text_index, next_block_index, streamed_thinking
+            nonlocal thinking_index, text_index, next_block_index
+            nonlocal streamed_thinking, thinking_block_text
             if not text:
                 return
             if text_index is not None:
@@ -4110,19 +4123,34 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                     content_block={"type": "thinking", "thinking": "", "signature": ""},
                 )
             streamed_thinking += text
+            thinking_block_text += text
             event(
                 "content_block_delta",
                 index=thinking_index,
                 delta={"type": "thinking_delta", "thinking": text},
             )
 
+        def close_thinking() -> None:
+            nonlocal thinking_index, thinking_block_text
+            if thinking_index is None:
+                return
+            event(
+                "content_block_delta",
+                index=thinking_index,
+                delta={
+                    "type": "signature_delta",
+                    "signature": anthropic_thinking_signature(thinking_block_text),
+                },
+            )
+            event("content_block_stop", index=thinking_index)
+            thinking_index = None
+            thinking_block_text = ""
+
         def emit(text: str) -> None:
             nonlocal text_index, thinking_index, next_block_index, streamed_text
             if not text:
                 return
-            if thinking_index is not None:
-                event("content_block_stop", index=thinking_index)
-                thinking_index = None
+            close_thinking()
             if text_index is None:
                 text_index = next_block_index
                 next_block_index += 1
@@ -4140,9 +4168,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
         def emit_tool(call: dict[str, Any]) -> None:
             nonlocal thinking_index, text_index, next_block_index
-            if thinking_index is not None:
-                event("content_block_stop", index=thinking_index)
-                thinking_index = None
+            close_thinking()
             if text_index is not None:
                 event("content_block_stop", index=text_index)
                 text_index = None
@@ -4201,9 +4227,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             emit_thinking(remaining)
         if remaining := stream_remainder(content, streamed_text):
             emit(remaining)
-        if thinking_index is not None:
-            event("content_block_stop", index=thinking_index)
-            thinking_index = None
+        close_thinking()
         if text_index is not None:
             event("content_block_stop", index=text_index)
             text_index = None
@@ -4212,7 +4236,13 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         usage = usage_from_result(result)
         event(
             "message_delta",
-            delta={"stop_reason": "tool_use" if tool_calls else "end_turn", "stop_sequence": None},
+            delta={
+                "stop_reason": anthropic_stop_reason(
+                    result.done_reason,
+                    has_tool_calls=bool(tool_calls),
+                ),
+                "stop_sequence": None,
+            },
             usage={"output_tokens": usage["completion_tokens"]},
         )
         self.remember_exchange(
@@ -6187,6 +6217,16 @@ def usage_from_result(result: GenerationResult) -> dict[str, int]:
     prompt = int(result.stats.get("prompt_tokens", 0))
     completion = int(result.stats.get("generated_tokens", 0))
     return {"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": prompt + completion}
+
+
+def generation_done_reason(stats: dict[str, Any], max_tokens: int) -> str:
+    explicit = str(stats.get("done_reason") or "").strip()
+    if explicit:
+        return explicit
+    generated = int(stats.get("generated_tokens") or 0)
+    if max_tokens >= 0 and generated >= max_tokens:
+        return "length"
+    return "stop"
 
 
 def openai_response_text(response: dict[str, Any]) -> str:

@@ -3,8 +3,11 @@ from __future__ import annotations
 import unittest
 
 from machboost.protocols import (
+    anthropic_body,
     anthropic_cache_affinity,
     anthropic_messages,
+    anthropic_stop_reason,
+    anthropic_thinking_signature,
     claude_code_session_title,
     compact_claude_code_messages,
     compact_claude_code_tools,
@@ -301,6 +304,45 @@ Long correction instructions.
 
 
 class AnthropicMessageTests(unittest.TestCase):
+    def test_local_thinking_has_a_stable_nonempty_signature(self):
+        signature = anthropic_thinking_signature("Inspect the repository.")
+
+        self.assertTrue(signature.startswith("machboost-v1:"))
+        self.assertEqual(
+            signature,
+            anthropic_thinking_signature("Inspect the repository."),
+        )
+        self.assertNotEqual(signature, anthropic_thinking_signature("Edit the file."))
+
+    def test_response_maps_backend_completion_reasons(self):
+        self.assertEqual(
+            anthropic_stop_reason("length", has_tool_calls=False),
+            "max_tokens",
+        )
+        self.assertEqual(
+            anthropic_stop_reason("stop", has_tool_calls=False),
+            "end_turn",
+        )
+        self.assertEqual(
+            anthropic_stop_reason("length", has_tool_calls=True),
+            "tool_use",
+        )
+
+    def test_nonstreaming_thinking_uses_transport_signature_and_stop_reason(self):
+        body = anthropic_body(
+            message_id="msg_1",
+            model="local-model",
+            text="",
+            thinking="Inspecting.",
+            tool_calls=[],
+            usage={"prompt_tokens": 2, "completion_tokens": 3},
+            metadata={},
+            stop_reason="max_tokens",
+        )
+
+        self.assertEqual(body["stop_reason"], "max_tokens")
+        self.assertTrue(body["content"][0]["signature"].startswith("machboost-v1:"))
+
     def test_prior_thinking_is_accepted_without_replaying_private_reasoning(self):
         messages = anthropic_messages(
             {
