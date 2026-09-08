@@ -299,6 +299,7 @@ Long correction instructions.
         system = str(compacted[0]["content"])
         self.assertIn("interactive coding agent", system)
         self.assertIn("Primary working directory: /tmp/project", system)
+        self.assertIn("never repeat the exact same tool call", system)
         self.assertNotIn("Long correction instructions", system)
         self.assertEqual(compacted[-1], messages[-1])
 
