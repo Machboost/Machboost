@@ -481,8 +481,11 @@ def _compact_claude_code_system(text: str) -> str:
         "You are an interactive coding agent inside Claude Code. Use the provided "
         "tools to inspect the repository before editing, match its existing style, "
         "run relevant checks, and report results accurately. Respect denied tool "
-        "calls. Confirm destructive or external actions unless the user explicitly "
-        "authorized them. Keep user-facing responses concise."
+        "calls. After a successful tool result, use that result to choose the next "
+        "step; never repeat the exact same tool call unchanged unless the result "
+        "failed or the user explicitly requested a rerun. Confirm destructive or "
+        "external actions unless the user explicitly authorized them. Keep "
+        "user-facing responses concise."
         + environment
     )
 
