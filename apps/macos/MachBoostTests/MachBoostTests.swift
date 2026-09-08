@@ -20,19 +20,20 @@ final class MachBoostTests: XCTestCase {
     func testOptionalReasoningOffersOffAndPreservesSupportedEfforts() {
         let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: false)
         XCTAssertTrue(options.isAvailable)
-        XCTAssertEqual(options.levels, [.off, .low, .medium, .high, .xhigh])
+        XCTAssertEqual(options.levels, [.off, .low, .medium, .high])
         XCTAssertEqual(options.defaultLevel, .low)
         XCTAssertEqual(options.selection("auto"), .low)
         XCTAssertNil(options.strength("off"))
         for level in options.levels {
             XCTAssertEqual(options.selection(level.rawValue), level)
         }
-        XCTAssertEqual(options.strength("xhigh"), "xhigh")
+        XCTAssertEqual(options.selection("xhigh"), .low)
+        XCTAssertEqual(options.strength("xhigh"), "low")
     }
 
     func testRequiredReasoningNormalizesOffAndInvalidPreferencesToLow() {
         let options = ReasoningOptions(supportsReasoning: true, requiresReasoning: true)
-        XCTAssertEqual(options.levels, [.low, .medium, .high, .xhigh])
+        XCTAssertEqual(options.levels, [.low, .medium, .high])
         XCTAssertEqual(options.defaultLevel, .low)
         XCTAssertEqual(options.selection("off"), .low)
         XCTAssertEqual(options.selection("unknown"), .low)
