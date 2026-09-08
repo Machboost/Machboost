@@ -397,7 +397,7 @@ def resolve_model(model: str, backend: str = "auto") -> ModelResolution:
 
 def select_backend_for_repo(model: str, backend: str = "auto") -> str:
     normalized = model.lower()
-    is_vision = looks_like_vision_model(normalized)
+    is_vision = looks_like_vision_model(normalized) or cached_model_is_vision(model)
     if backend == "mlx" and is_vision:
         return "mlx-vlm"
     if backend == "hf" and is_vision:
@@ -405,7 +405,12 @@ def select_backend_for_repo(model: str, backend: str = "auto") -> str:
     if backend != "auto":
         return backend
     if is_vision:
-        return "mlx-vlm" if normalized.startswith("mlx-community/") else "hf-vlm"
+        is_mlx = (
+            normalized.startswith("mlx-community/")
+            or "mlx" in normalized
+            or Path(model).expanduser().exists()
+        )
+        return "mlx-vlm" if is_mlx else "hf-vlm"
     if normalized.startswith("mlx-community/") or "mlx" in normalized:
         return "mlx"
     return "hf"
@@ -424,6 +429,41 @@ def looks_like_vision_model(model: str) -> bool:
         "muse-glimmer",
     )
     return any(marker in normalized for marker in markers)
+
+
+def cached_model_is_vision(model: str) -> bool:
+    path = Path(model).expanduser()
+    if not path.is_dir():
+        cached_path = cached_repo_path(model)
+        if cached_path is None:
+            return False
+        path = cached_path
+    if not path.is_dir():
+        return False
+    config = _read_optional_json(path / "config.json")
+    identity = " ".join(
+        [
+            str(config.get("model_type") or ""),
+            *(str(value) for value in config.get("architectures") or ()),
+        ]
+    ).lower()
+    return bool(
+        config.get("vision_config")
+        or config.get("visual")
+        or any(
+            marker in identity
+            for marker in (
+                "vision",
+                "vlm",
+                "llava",
+                "pixtral",
+                "mllama",
+                "gemma3",
+                "gemma4",
+                "muse_glimmer",
+            )
+        )
+    )
 
 
 def alias_rows() -> list[dict]:
