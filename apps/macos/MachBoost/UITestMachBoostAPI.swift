@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import MachBoostDaemonClient
 
 final class UITestMachBoostAPI: MachBoostAPIProtocol, @unchecked Sendable {
     private let lock = NSLock()
@@ -157,6 +158,13 @@ final class UITestMachBoostAPI: MachBoostAPIProtocol, @unchecked Sendable {
                         )
                         return
                     }
+                    if self.isMCPFixture(request) {
+                        try await self.streamMCPFixture(
+                            request,
+                            continuation: continuation
+                        )
+                        return
+                    }
                     let response = self.fixtureResponse(
                         for: request,
                         requestNumber: requestNumber
@@ -246,6 +254,99 @@ final class UITestMachBoostAPI: MachBoostAPIProtocol, @unchecked Sendable {
         return (explicitlyEnabled && request.tools?.isEmpty == false) || request.messages.contains {
             $0.role == "user" && $0.content == "Exercise coding agent"
         }
+    }
+
+    private func isMCPFixture(_ request: ChatRequest) -> Bool {
+        request.messages.contains {
+            $0.role == "user" && $0.content == "Use connected MCP tool"
+        }
+    }
+
+    private func streamMCPFixture(
+        _ request: ChatRequest,
+        continuation: AsyncThrowingStream<ChatEvent, Error>.Continuation
+    ) async throws {
+        try await Task.sleep(for: .milliseconds(80))
+        let completedTools = request.messages.filter { $0.role == "tool" }.count
+        if completedTools == 0 {
+            continuation.yield(
+                toolEvent(
+                    requestID: request.requestID,
+                    calls: [
+                        .init(
+                            id: "mcp-search-1",
+                            type: "function",
+                            function: .init(
+                                name: "search_mcp_tools",
+                                arguments: .object(["query": .string("echo")])
+                            )
+                        ),
+                    ]
+                )
+            )
+        } else if completedTools == 1 {
+            continuation.yield(
+                toolEvent(
+                    requestID: request.requestID,
+                    calls: [
+                        .init(
+                            id: "mcp-call-1",
+                            type: "function",
+                            function: .init(
+                                name: "call_mcp_tool",
+                                arguments: .object([
+                                    "server_id": .string("mcp_fixture"),
+                                    "name": .string("echo"),
+                                    "arguments": .string(#"{"text":"connected"}"#),
+                                ])
+                            )
+                        ),
+                    ]
+                )
+            )
+        } else {
+            continuation.yield(
+                chatEvent(
+                    requestID: request.requestID,
+                    content: "MCP tool result: connected.",
+                    done: true
+                )
+            )
+            continuation.finish()
+            return
+        }
+        continuation.yield(chatEvent(requestID: request.requestID, content: "", done: true))
+        continuation.finish()
+    }
+
+    func extensions() async throws -> ExtensionsResponse {
+        let servers = ProcessInfo.processInfo.environment["MACHBOOST_UI_TEST_MCP"] == "1"
+            ? #"[{"id":"mcp_fixture","name":"Echo connector","transport":"stdio","url":null,"command":"fixture","args":[],"enabled":true,"tool_count":1,"last_status":"ready","last_error":null,"env_keys":[],"header_names":[]}]"#
+            : "[]"
+        return try JSONDecoder().decode(ExtensionsResponse.self, from: Data(
+            "{\"schema\":\"machboost.extensions.v1\",\"mcp_servers\":\(servers),\"skills\":[],\"gateway_tools\":[]}".utf8
+        ))
+    }
+
+    func searchMCPTools(query: String, limit: Int) async throws -> [MCPToolSummary] {
+        try JSONDecoder().decode([MCPToolSummary].self, from: Data(
+            #"[{"server_id":"mcp_fixture","server_name":"Echo connector","name":"echo","title":"Echo","description":"Echo supplied text","input_schema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}]"#.utf8
+        ))
+    }
+
+    func callMCPTool(
+        serverID: String,
+        name: String,
+        arguments: JSONValue
+    ) async throws -> MCPToolResult {
+        guard serverID == "mcp_fixture", name == "echo",
+              case let .object(values) = arguments,
+              values["text"] == .string("connected") else {
+            throw MachBoostAPIError.stream("The MCP fixture received malformed arguments.")
+        }
+        return try JSONDecoder().decode(MCPToolResult.self, from: Data(
+            #"{"server_id":"mcp_fixture","server_name":"Echo connector","tool":"echo","is_error":false,"text":"connected"}"#.utf8
+        ))
     }
 
     private func streamCodingFixture(

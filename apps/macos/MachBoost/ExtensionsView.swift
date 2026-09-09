@@ -286,6 +286,9 @@ private struct MCPConnectorEditor: View {
     @State private var headers: String
     @State private var enabled: Bool
     @State private var isSaving = false
+    @State private var validationMessage = ""
+    private let savedEnvironmentKeys: [String]
+    private let savedHeaderNames: [String]
     let save: (MCPConnectorDraft) async -> Bool
 
     init(connector: MCPServerSummary?, save: @escaping (MCPConnectorDraft) async -> Bool) {
@@ -297,6 +300,8 @@ private struct MCPConnectorEditor: View {
         _environment = State(initialValue: "")
         _headers = State(initialValue: "")
         _enabled = State(initialValue: connector?.enabled ?? true)
+        savedEnvironmentKeys = connector?.envKeys ?? []
+        savedHeaderNames = connector?.headerNames ?? []
         self.save = save
     }
 
@@ -323,9 +328,17 @@ private struct MCPConnectorEditor: View {
                     TextField("Server URL", text: $url, prompt: Text("https://server.example/mcp"))
                     TextField("Request headers", text: $headers, axis: .vertical)
                         .lineLimit(2 ... 5)
-                    Text("One NAME=VALUE header per line. Saved values are preserved when this is left blank and are never returned by the API.")
+                    Text("One Header: value or Header=value entry per line. Saved values are preserved when this is left blank and are never returned by the API.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if !savedHeaderNames.isEmpty {
+                        Label(
+                            "Stored securely: \(savedHeaderNames.joined(separator: ", "))",
+                            systemImage: "lock.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 } else {
                     TextField("Command", text: $command, prompt: Text("npx"))
                     TextField("Arguments", text: $arguments, axis: .vertical)
@@ -335,6 +348,19 @@ private struct MCPConnectorEditor: View {
                     Text("Enter one argument per line and one NAME=VALUE environment variable per line. Saved environment values are preserved when left blank.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if !savedEnvironmentKeys.isEmpty {
+                        Label(
+                            "Stored securely: \(savedEnvironmentKeys.joined(separator: ", "))",
+                            systemImage: "lock.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                if !validationMessage.isEmpty {
+                    Label(validationMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
                 Toggle("Enabled", isOn: $enabled)
             }
@@ -353,14 +379,31 @@ private struct MCPConnectorEditor: View {
 
     private func saveConnector() {
         isSaving = true
+        validationMessage = ""
+        let parsedEnvironment = MCPConnectorFieldParser.parse(
+            environment,
+            separators: ["="]
+        )
+        let parsedHeaders = MCPConnectorFieldParser.parse(
+            headers,
+            separators: [":", "="]
+        )
+        let invalidLines = transport == "http"
+            ? parsedHeaders.invalidLines
+            : parsedEnvironment.invalidLines
+        guard invalidLines.isEmpty else {
+            validationMessage = "Check line\(invalidLines.count == 1 ? "" : "s") \(invalidLines.map(String.init).joined(separator: ", "))."
+            isSaving = false
+            return
+        }
         let draft = MCPConnectorDraft(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             transport: transport,
             url: transport == "http" ? url.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
             command: transport == "stdio" ? command.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
             args: lines(arguments),
-            environment: pairs(environment),
-            headers: pairs(headers),
+            environment: parsedEnvironment.values,
+            headers: parsedHeaders.values,
             enabled: enabled
         )
         Task {
@@ -373,15 +416,37 @@ private struct MCPConnectorEditor: View {
         value.split(whereSeparator: \.isNewline).map(String.init).filter { !$0.isEmpty }
     }
 
-    private func pairs(_ value: String) -> [String: String] {
-        var result: [String: String] = [:]
-        for line in lines(value) {
-            guard let separator = line.firstIndex(of: "=") else { continue }
+}
+
+struct MCPConnectorFieldParseResult: Equatable {
+    let values: [String: String]
+    let invalidLines: [Int]
+}
+
+enum MCPConnectorFieldParser {
+    static func parse(
+        _ source: String,
+        separators: Set<Character>
+    ) -> MCPConnectorFieldParseResult {
+        var values: [String: String] = [:]
+        var invalidLines: [Int] = []
+        for (offset, rawLine) in source.components(separatedBy: .newlines).enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            guard let separator = line.firstIndex(where: separators.contains) else {
+                invalidLines.append(offset + 1)
+                continue
+            }
             let key = String(line[..<separator]).trimmingCharacters(in: .whitespaces)
-            let item = String(line[line.index(after: separator)...])
-            if !key.isEmpty { result[key] = item }
+            let value = String(line[line.index(after: separator)...])
+                .trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty, !value.isEmpty else {
+                invalidLines.append(offset + 1)
+                continue
+            }
+            values[key] = value
         }
-        return result
+        return MCPConnectorFieldParseResult(values: values, invalidLines: invalidLines)
     }
 }
 

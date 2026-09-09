@@ -6,6 +6,38 @@ import XCTest
 @testable import MachBoost
 
 final class MachBoostTests: XCTestCase {
+    func testMCPConnectorHeadersAcceptStandardAndEnvironmentSyntax() {
+        let result = MCPConnectorFieldParser.parse(
+            "Authorization: Bearer secret\nX-Workspace=demo",
+            separators: [":", "="]
+        )
+
+        XCTAssertEqual(result.values["Authorization"], "Bearer secret")
+        XCTAssertEqual(result.values["X-Workspace"], "demo")
+        XCTAssertTrue(result.invalidLines.isEmpty)
+    }
+
+    func testMCPConnectorFieldsReportMalformedLinesInsteadOfDroppingThem() {
+        let result = MCPConnectorFieldParser.parse(
+            "Authorization Bearer secret\nX-Ready: yes",
+            separators: [":", "="]
+        )
+
+        XCTAssertEqual(result.values, ["X-Ready": "yes"])
+        XCTAssertEqual(result.invalidLines, [1])
+    }
+
+    @MainActor
+    func testMCPToolArgumentsAcceptStringifiedJSONObjects() throws {
+        let result = try XCTUnwrap(ExtensionTools.normalizedObject(
+            .string(#"{"path":"README.md","limit":2}"#)
+        ))
+
+        XCTAssertEqual(result["path"], .string("README.md"))
+        XCTAssertEqual(result["limit"], .number(2))
+        XCTAssertNil(ExtensionTools.normalizedObject(.string("not json")))
+    }
+
     func testReasoningControlsAreUnavailableForNonReasoningModels() {
         for requiresReasoning in [false, true] {
             let options = ReasoningOptions(supportsReasoning: false, requiresReasoning: requiresReasoning)
