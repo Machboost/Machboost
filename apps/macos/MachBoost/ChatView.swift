@@ -820,7 +820,7 @@ struct ChatView: View {
 
         return ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView(.vertical, showsIndicators: true) {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     if messages.isEmpty {
                         VStack(spacing: 16) {
                             Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
