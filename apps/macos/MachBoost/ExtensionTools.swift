@@ -9,7 +9,7 @@ enum ExtensionTools {
         APIToolDefinition(
             function: .init(
                 name: "search_mcp_tools",
-                description: "Find tools exposed by the user's enabled MCP connectors.",
+                description: "Find tools exposed by enabled MCP connectors. After choosing a result, call call_mcp_tool with its exact server_id, name, and arguments.",
                 parameters: .object([
                     "type": .string("object"),
                     "properties": .object([
@@ -27,7 +27,7 @@ enum ExtensionTools {
         APIToolDefinition(
             function: .init(
                 name: "call_mcp_tool",
-                description: "Call one MCP tool returned by search_mcp_tools.",
+                description: "Call one tool returned by search_mcp_tools. Copy server_id and name exactly. Omit arguments when the selected tool takes no input.",
                 parameters: .object([
                     "type": .string("object"),
                     "properties": .object([
@@ -35,9 +35,7 @@ enum ExtensionTools {
                         "name": .object(["type": .string("string")]),
                         "arguments": .object(["type": .string("object")]),
                     ]),
-                    "required": .array([
-                        .string("server_id"), .string("name"), .string("arguments"),
-                    ]),
+                    "required": .array([.string("server_id"), .string("name")]),
                 ])
             )
         ),
@@ -62,21 +60,21 @@ enum ExtensionTools {
             return CodingToolResult(
                 callID: call.id,
                 name: call.function.name,
-                content: String(decoding: data, as: UTF8.self),
+                content: "Choose a tool and call call_mcp_tool with its exact server_id and name.\n"
+                    + String(decoding: data, as: UTF8.self),
                 changedPath: nil,
                 changePatch: nil
             )
         case "call_mcp_tool":
-            let serverID = try requiredString(arguments, "server_id")
-            let name = try requiredString(arguments, "name")
-            let toolArguments = arguments["arguments"] ?? .object([:])
-            guard case .object = toolArguments else {
+            let serverID = try requiredString(arguments, keys: ["server_id", "serverId"])
+            let name = try requiredString(arguments, keys: ["name", "tool", "tool_name"])
+            guard let normalizedArguments = normalizedObject(arguments["arguments"] ?? .object([:])) else {
                 throw CodingWorkspaceError.invalidArguments("arguments must be a JSON object")
             }
             let result = try await appState.callMCPTool(
                 serverID: serverID,
                 name: name,
-                arguments: toolArguments
+                arguments: .object(normalizedArguments)
             )
             let content = json([
                 "server": result.serverName,
@@ -96,9 +94,26 @@ enum ExtensionTools {
         }
     }
 
+    static func normalizedObject(_ value: JSONValue?) -> [String: JSONValue]? {
+        switch value {
+        case let .object(object):
+            return object
+        case let .string(source):
+            guard let data = source.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode(JSONValue.self, from: data),
+                  case let .object(object) = decoded else {
+                return nil
+            }
+            return object
+        case .none:
+            return [:]
+        default:
+            return nil
+        }
+    }
+
     private static func object(_ value: JSONValue?) -> [String: JSONValue] {
-        guard case let .object(object) = value else { return [:] }
-        return object
+        normalizedObject(value) ?? [:]
     }
 
     private static func string(_ value: JSONValue?) -> String? {
@@ -110,9 +125,17 @@ enum ExtensionTools {
         _ object: [String: JSONValue],
         _ key: String
     ) throws -> String {
-        guard let value = string(object[key])?.trimmingCharacters(in: .whitespacesAndNewlines),
+        try requiredString(object, keys: [key])
+    }
+
+    private static func requiredString(
+        _ object: [String: JSONValue],
+        keys: [String]
+    ) throws -> String {
+        guard let value = keys.lazy.compactMap({ string(object[$0]) }).first?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty else {
-            throw CodingWorkspaceError.invalidArguments("\(key) is required")
+            throw CodingWorkspaceError.invalidArguments("\(keys[0]) is required")
         }
         return value
     }
