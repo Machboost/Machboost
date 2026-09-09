@@ -228,7 +228,7 @@ final class MachBoostUITests: XCTestCase {
         effort.click()
         let controls = app.buttons["Generation controls"]
         focus(controls)
-        XCTAssertTrue(app.staticTexts["Context window"].exists)
+        XCTAssertTrue(app.staticTexts["Context window"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.sliders["reasoning-effort-slider"].exists)
         controls.click()
 
@@ -242,6 +242,35 @@ final class MachBoostUITests: XCTestCase {
         XCTAssertTrue(response.waitForExistence(timeout: 3))
         XCTAssertLessThan(reasoning.frame.maxY, tool.frame.minY)
         XCTAssertLessThan(tool.frame.maxY, response.frame.minY)
+    }
+
+    @MainActor
+    func testConnectedToolCanBeSearchedAndCalledWithStringifiedArguments() {
+        let app = launchApp(environment: ["MACHBOOST_UI_TEST_MCP": "1"])
+        let tools = app.buttons["Connected tools"]
+        XCTAssertTrue(tools.waitForExistence(timeout: 10))
+        if tools.value as? String != "On" {
+            tools.click()
+        }
+
+        send("Use connected MCP tool", in: app)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["tool-call-search_mcp_tools"]
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["tool-call-call_mcp_tool"]
+                .waitForExistence(timeout: 5)
+        )
+        let approval = app.sheets.buttons["Allow Once"]
+        XCTAssertTrue(approval.waitForExistence(timeout: 5))
+        approval.click()
+
+        XCTAssertTrue(
+            app.staticTexts["MCP tool result: connected."]
+                .waitForExistence(timeout: 10)
+        )
     }
 
     @MainActor
@@ -353,6 +382,22 @@ final class MachBoostUITests: XCTestCase {
             object: endMarker
         )
         XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 3), .completed)
+
+        let transcript = app.scrollViews.containing(
+            .any,
+            identifier: "chat-scroll-bottom"
+        ).firstMatch
+        XCTAssertTrue(transcript.exists)
+        transcript.swipeDown()
+        transcript.swipeDown()
+        let heading = app.staticTexts["Repository review"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertFalse(heading.frame.isEmpty)
+
+        transcript.swipeUp()
+        transcript.swipeUp()
+        XCTAssertTrue(endMarker.waitForExistence(timeout: 3))
+        XCTAssertFalse(endMarker.frame.isEmpty)
     }
 
     @MainActor
@@ -536,6 +581,7 @@ final class MachBoostUITests: XCTestCase {
             "-machboost.chat.maxTokens", "0",
             "-machboost.chat.optionalOutputLimitMigrated", "YES",
             "-machboost.chat.temperature", "0.2",
+            "-machboost.chat.codingMode", "YES",
             "-machboost.chat.reasoningStrength", "off",
             "-machboost.chat.showReasoning", "YES",
             "-machboost.chat.autoSummarize", "YES",
