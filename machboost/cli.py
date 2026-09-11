@@ -37,6 +37,12 @@ from .claude_desktop import (
     ClaudeDesktopProfileManager,
     save_model_mappings,
 )
+from .codex_integration import (
+    ChatGPTProfileManager,
+    CodexCLIProfileManager,
+    select_model_rows,
+    start_chatgpt_gateway_relay,
+)
 from .connections import ConnectionStore, normalize_endpoint
 from .context_bench import benchmark_context_acceleration, context_fingerprint
 from .latency import benchmark_chat_latency
@@ -839,9 +845,48 @@ def _key_value_pairs(values: Sequence[str]) -> dict[str, str]:
 def run_launch(args: argparse.Namespace, *, output_stream=None, error_stream=None) -> int:
     output_stream = output_stream or sys.stdout
     error_stream = error_stream or sys.stderr
-    if args.integration not in {"claude-desktop", "claude-app"}:
+    if args.integration in {"claude-desktop", "claude-app"}:
+        return _run_claude_desktop_launch(
+            args,
+            output_stream=output_stream,
+            error_stream=error_stream,
+        )
+    if args.integration in {"chatgpt", "codex-app", "codex-desktop"}:
+        return _run_chatgpt_launch(
+            args,
+            output_stream=output_stream,
+            error_stream=error_stream,
+        )
+    if args.integration == "codex":
+        return _run_codex_launch(
+            args,
+            output_stream=output_stream,
+            error_stream=error_stream,
+        )
+    print(
+        f"machboost launch error: unsupported integration {args.integration!r}",
+        file=error_stream,
+    )
+    return 2
+
+
+def _run_claude_desktop_launch(
+    args: argparse.Namespace,
+    *,
+    output_stream,
+    error_stream,
+) -> int:
+    if args.status:
+        status = ClaudeDesktopProfileManager().status()
+        if args.json:
+            print(json.dumps(status, indent=2), file=output_stream)
+        else:
+            state = "connected" if status.get("connected") else "not connected"
+            print(f"Claude Desktop: {state}", file=output_stream)
+        return 0
+    if args.config_only:
         print(
-            f"machboost launch error: unsupported integration {args.integration!r}",
+            "machboost launch error: --config is not supported for Claude Desktop; use --no-restart",
             file=error_stream,
         )
         return 2
@@ -908,6 +953,160 @@ def run_launch(args: argparse.Namespace, *, output_stream=None, error_stream=Non
     if manager.installed_application() is not None and not restarted:
         print("Quit and reopen Claude Desktop for the change to take effect.", file=output_stream)
     return 0
+
+
+def _run_chatgpt_launch(
+    args: argparse.Namespace,
+    *,
+    output_stream,
+    error_stream,
+) -> int:
+    manager = ChatGPTProfileManager()
+    try:
+        if args.status:
+            status = manager.status()
+            action = "status"
+            restarted = False
+        elif args.restore:
+            status = manager.restore()
+            action = "restored"
+            restarted = _restart_desktop_integration(manager, args)
+        else:
+            endpoint, token, is_local = _launch_gateway(args)
+            client = MachBoostClient(endpoint, api_token=token, timeout=args.timeout)
+            rows = select_model_rows(client.catalog(), args.model or ())
+            if not rows:
+                raise RuntimeError(
+                    "the selected MachBoost server has no downloaded models; download or load one first"
+                )
+            app_endpoint = endpoint
+            if not is_local:
+                app_endpoint = start_chatgpt_gateway_relay(endpoint, token)
+            status = manager.configure(
+                app_endpoint,
+                rows,
+                model=rows[0]["name"],
+            )
+            if not is_local:
+                status["upstream"] = endpoint
+                status["relayed"] = True
+            action = "connected"
+            restarted = False if args.config_only else _restart_desktop_integration(manager, args)
+    except (MachBoostAPIError, OSError, RuntimeError, ValueError) as exc:
+        print(f"machboost launch error: {exc}", file=error_stream)
+        return 2
+
+    if args.json:
+        print(
+            json.dumps({**status, "action": action, "restarted": restarted}, indent=2),
+            file=output_stream,
+        )
+    elif action == "status":
+        state = "connected" if status.get("connected") else "not connected"
+        print(f"ChatGPT Desktop: {state}", file=output_stream)
+    elif action == "restored":
+        print("ChatGPT Desktop restored to its previous model configuration.", file=output_stream)
+    else:
+        destination = status.get("upstream") or status.get("endpoint")
+        print(f"MachBoost models added to ChatGPT Desktop through {destination}.", file=output_stream)
+        print("Run `machboost launch chatgpt --restore` to switch back.", file=output_stream)
+    if action != "status" and manager.status().get("installed") and not restarted:
+        print("Quit and reopen ChatGPT for the change to take effect.", file=output_stream)
+    return 0
+
+
+def _run_codex_launch(
+    args: argparse.Namespace,
+    *,
+    output_stream,
+    error_stream,
+) -> int:
+    manager = CodexCLIProfileManager()
+    try:
+        if args.status:
+            status = manager.status()
+            action = "status"
+        elif args.restore:
+            status = manager.restore()
+            action = "restored"
+        else:
+            endpoint, token, _ = _launch_gateway(args)
+            client = MachBoostClient(endpoint, api_token=token, timeout=args.timeout)
+            rows = select_model_rows(client.catalog(), args.model or ())
+            if not rows:
+                raise RuntimeError(
+                    "the selected MachBoost server has no downloaded models; download or load one first"
+                )
+            status = manager.configure(
+                endpoint,
+                token,
+                rows,
+                model=rows[0]["name"],
+            )
+            action = "configured"
+            if not args.config_only:
+                return manager.run(
+                    token,
+                    model=rows[0]["name"],
+                    extra=args.extra_args,
+                )
+    except (MachBoostAPIError, OSError, RuntimeError, ValueError) as exc:
+        print(f"machboost launch error: {exc}", file=error_stream)
+        return 2
+
+    if args.json:
+        print(json.dumps({**status, "action": action}, indent=2), file=output_stream)
+    elif action == "status":
+        state = "configured" if status.get("configured") else "not configured"
+        print(f"Codex CLI: {state}", file=output_stream)
+    elif action == "restored":
+        print("Codex CLI MachBoost profile removed.", file=output_stream)
+    else:
+        print(
+            f"Codex CLI profile ready. Run `codex --profile {status['profile']}`.",
+            file=output_stream,
+        )
+    return 0
+
+
+def _restart_desktop_integration(manager, args: argparse.Namespace) -> bool:
+    if args.no_restart or not manager.status().get("installed"):
+        return False
+    restart = bool(args.yes)
+    if not restart and sys.stdin.isatty():
+        answer = input("Restart the desktop app now? Any running task will stop. [y/N] ")
+        restart = answer.strip().lower() in {"y", "yes"}
+    if restart:
+        manager.restart_application()
+        return True
+    return False
+
+
+def _launch_gateway(args: argparse.Namespace) -> tuple[str, str, bool]:
+    if args.connection and args.endpoint:
+        raise ValueError("use either --connection or --endpoint, not both")
+    if args.connection:
+        store = ConnectionStore()
+        profile = store.get(args.connection)
+        token = store.token(profile)
+        if not token:
+            raise ValueError(f"saved connection {profile.name!r} has no API key")
+        return profile.endpoint, token, False
+
+    endpoint = normalize_endpoint(args.endpoint or f"http://{DEFAULT_HOST}:{DEFAULT_PORT}")
+    host = (urlparse(endpoint).hostname or "").lower()
+    is_local = host in {"127.0.0.1", "localhost", "::1"}
+    if is_local:
+        ensure_server(endpoint, timeout=args.timeout)
+    token = (
+        str(args.api_key or "").strip()
+        or str(os.environ.get("MACHBOOST_API_TOKEN") or "").strip()
+        or (_machboost_app_api_token() if is_local else "")
+        or ("machboost" if is_local else "")
+    )
+    if not token:
+        raise ValueError("provide --api-key or use a saved --connection for a remote host")
+    return endpoint, token, is_local
 
 
 def _claude_desktop_gateway(args: argparse.Namespace) -> tuple[str, str, bool]:
@@ -3345,21 +3544,39 @@ def build_parser() -> argparse.ArgumentParser:
     disconnect = subcommands.add_parser("disconnect", help="Forget a saved MachBoost device.")
     disconnect.add_argument("name", help="Connection name to forget.")
 
-    launch = subcommands.add_parser("launch", help="Connect MachBoost to another AI application.")
-    launch.add_argument("integration", choices=["claude-desktop", "claude-app"])
+    launch = subcommands.add_parser("launch", help="Use MachBoost models in another AI application.")
+    launch.add_argument(
+        "integration",
+        choices=[
+            "claude-desktop",
+            "claude-app",
+            "chatgpt",
+            "codex-app",
+            "codex-desktop",
+            "codex",
+        ],
+    )
     launch.add_argument("--endpoint", help="MachBoost server root URL. Defaults to this Mac.")
     launch.add_argument("--connection", help="Saved MachBoost connection name to use.")
     launch.add_argument("--api-key", help="Bearer key for an explicit remote endpoint.")
     launch.add_argument(
         "--model",
         action="append",
-        help="Local model to advertise in Claude Desktop; repeat for up to five models.",
+        help="Model to advertise or launch; repeat to expose multiple desktop models.",
     )
-    launch.add_argument("--restore", action="store_true", help="Restore Claude Desktop's previous profile.")
-    launch.add_argument("--no-restart", action="store_true", help="Do not restart Claude Desktop.")
-    launch.add_argument("--yes", action="store_true", help="Restart Claude Desktop without prompting.")
+    launch.add_argument("--restore", action="store_true", help="Restore the integration's previous profile.")
+    launch.add_argument("--no-restart", action="store_true", help="Do not restart a desktop integration.")
+    launch.add_argument("--yes", action="store_true", help="Restart a desktop integration without prompting.")
+    launch.add_argument(
+        "--config",
+        action="store_true",
+        dest="config_only",
+        help="Configure the integration without launching it.",
+    )
+    launch.add_argument("--status", action="store_true", help="Show integration status without changing it.")
     launch.add_argument("--timeout", type=float, default=30.0)
     launch.add_argument("--json", action="store_true")
+    launch.set_defaults(extra_args=[])
 
     mcp = subcommands.add_parser("mcp", help="Manage Model Context Protocol connectors.")
     mcp_subcommands = mcp.add_subparsers(dest="mcp_command", required=True)
@@ -3655,7 +3872,15 @@ def torch_dtype_from_name(name: str):
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw_args = list(argv) if argv is not None else list(sys.argv[1:])
+    launch_extra: list[str] = []
+    if raw_args[:1] == ["launch"] and "--" in raw_args:
+        separator = raw_args.index("--")
+        launch_extra = raw_args[separator + 1 :]
+        raw_args = raw_args[:separator]
+    args = parser.parse_args(raw_args)
+    if args.command == "launch":
+        args.extra_args = launch_extra
     if args.command == "doctor":
         data = doctor_data()
         if args.json:
