@@ -3713,7 +3713,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
     def handle_openai_response(self, payload: dict[str, Any]) -> None:
         translated = dict(payload)
-        translated["max_tokens"] = payload.get("max_output_tokens", payload.get("max_tokens", 1024))
+        translated["max_tokens"] = payload.get("max_output_tokens", payload.get("max_tokens", -1))
         tools = responses_tools(payload.get("tools"))
         if tools:
             translated["tools"] = tools
@@ -5618,8 +5618,10 @@ def openai_options(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(reasoning, dict):
         reasoning_effort = reasoning.get("effort", reasoning_effort)
     if reasoning_effort is not None:
-        options["_think"] = True
-        options["_reasoning_strength"] = str(reasoning_effort)
+        normalized_effort = str(reasoning_effort).strip().lower()
+        options["_think"] = normalized_effort not in {"", "none", "off", "false", "0"}
+        if options["_think"]:
+            options["_reasoning_strength"] = normalized_effort
     return options
 
 
