@@ -3713,7 +3713,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
     def handle_openai_response(self, payload: dict[str, Any]) -> None:
         translated = dict(payload)
-        translated["max_tokens"] = payload.get("max_output_tokens", payload.get("max_tokens", 1024))
+        translated["max_tokens"] = payload.get("max_output_tokens", payload.get("max_tokens", -1))
         tools = responses_tools(payload.get("tools"))
         if tools:
             translated["tools"] = tools
@@ -5618,8 +5618,10 @@ def openai_options(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(reasoning, dict):
         reasoning_effort = reasoning.get("effort", reasoning_effort)
     if reasoning_effort is not None:
-        options["_think"] = True
-        options["_reasoning_strength"] = str(reasoning_effort)
+        normalized_effort = str(reasoning_effort).strip().lower()
+        options["_think"] = normalized_effort not in {"", "none", "off", "false", "0"}
+        if options["_think"]:
+            options["_reasoning_strength"] = normalized_effort
     return options
 
 
@@ -6505,18 +6507,33 @@ def integration_catalog(host: str) -> dict[str, Any]:
             },
             {
                 "id": "anthropic",
-                "name": "Anthropic SDK and Claude Code",
+                "name": "Anthropic SDK and Claude Code (preview)",
                 "environment": {
                     "ANTHROPIC_BASE_URL": endpoint,
                     "ANTHROPIC_AUTH_TOKEN": "YOUR_MACHBOOST_KEY",
                 },
             },
             {
+                "id": "chatgpt-desktop",
+                "name": "ChatGPT Desktop (Codex)",
+                "api": "responses",
+                "setup": "machboost launch chatgpt",
+                "support": "verified",
+            },
+            {
+                "id": "codex-cli",
+                "name": "Codex CLI",
+                "api": "responses",
+                "setup": "machboost launch codex",
+                "support": "verified",
+            },
+            {
                 "id": "claude-desktop",
-                "name": "Claude Desktop third-party inference",
+                "name": "Claude Desktop third-party inference (preview)",
                 "gateway_base_url": endpoint,
                 "gateway_auth_scheme": "bearer",
                 "setup": "machboost launch claude-desktop",
+                "support": "preview",
             },
             {
                 "id": "cline-kilo",

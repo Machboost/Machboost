@@ -12,6 +12,8 @@ from machboost.protocols import (
     compact_claude_code_messages,
     compact_claude_code_tools,
     is_claude_code_request,
+    responses_messages,
+    responses_tools,
     select_anthropic_tools,
 )
 
@@ -22,6 +24,74 @@ def tool(name: str, description: str = "") -> dict:
         "description": description,
         "input_schema": {"type": "object", "properties": {}},
     }
+
+
+class ResponsesProtocolTests(unittest.TestCase):
+    def test_expands_namespaced_tools_with_qualified_names(self):
+        converted = responses_tools(
+            [
+                {
+                    "type": "namespace",
+                    "name": "workspace",
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": "read_file",
+                            "description": "Read a file",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"path": {"type": "string"}},
+                                "required": ["path"],
+                            },
+                        }
+                    ],
+                },
+                {
+                    "type": "namespace",
+                    "name": "mcp__codex_apps__github",
+                    "tools": [{"type": "function", "name": "_search"}],
+                },
+            ]
+        )
+
+        self.assertEqual(
+            [item["function"]["name"] for item in converted],
+            ["workspace.read_file", "mcp__codex_apps__github_search"],
+        )
+        self.assertEqual(
+            converted[0]["function"]["parameters"]["required"],
+            ["path"],
+        )
+
+    def test_accepts_codex_control_history_and_custom_tool_calls(self):
+        converted = responses_messages(
+            {
+                "input": [
+                    {"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque"},
+                    {
+                        "type": "custom_tool_call",
+                        "call_id": "call_1",
+                        "name": "apply_patch",
+                        "input": "*** Begin Patch",
+                    },
+                    {
+                        "type": "custom_tool_call_output",
+                        "call_id": "call_1",
+                        "output": "Done!",
+                    },
+                    {"type": "compaction_trigger"},
+                    {"type": "message", "role": "user", "content": "Continue"},
+                ]
+            }
+        )
+
+        self.assertEqual(len(converted), 3)
+        self.assertEqual(
+            converted[0]["tool_calls"][0]["function"]["name"],
+            "apply_patch",
+        )
+        self.assertEqual(converted[1]["role"], "tool")
+        self.assertEqual(converted[2]["content"], "Continue")
 
 
 class AnthropicToolSelectionTests(unittest.TestCase):

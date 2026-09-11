@@ -411,11 +411,57 @@ curl http://127.0.0.1:11435/api/chat -d '{
 }'
 ```
 
-### Claude Desktop
+### ChatGPT Desktop and Codex
 
-Claude Desktop can use MachBoost as its native third-party inference gateway.
+MachBoost can provide local or shared models to the current ChatGPT macOS app's
+Codex workspace and to Codex CLI. Both integrations use the OpenAI Responses
+API; they do not use MCP for inference.
+
+Connect the ChatGPT app to the resident models on this Mac:
+
+```sh
+machboost launch chatgpt
+```
+
+Connect it to models on a saved MachBoost host, or restore the app's previous
+configuration:
+
+```sh
+machboost launch chatgpt --connection studio
+machboost launch chatgpt --restore
+```
+
+Launch Codex CLI with an isolated MachBoost profile:
+
+```sh
+machboost launch codex
+
+# Forward normal Codex arguments after --.
+machboost launch codex -- --cd ./my-repo --sandbox workspace-write
+```
+
+The Codex launcher writes a separate `machboost-launch` profile and model
+catalog under `~/.codex`; it does not replace the user's normal Codex provider.
+The ChatGPT launcher changes only the root model, catalog, and base-URL values
+needed by the app, records their previous values, and restores them with the
+command above. A shared HTTP host is reached through an authenticated loopback
+bridge so ChatGPT still connects to localhost and the team key is not stored in
+its model profile.
+
+End-to-end validation uses the Codex executable bundled with ChatGPT, not a
+mock client. In the repository smoke test, resident Muse Glimmer requested a
+shell command, Codex executed it, MachBoost accepted the tool result, and the
+model completed the second turn with the correct directory. Model quality and
+latency still depend on the selected local model; this integration does not
+make a small non-tool-tuned model behave like a hosted coding model.
+
+### Claude Desktop (preview)
+
+Claude Desktop can use MachBoost through its third-party inference gateway.
 This is not an MCP connection: Claude keeps its chat, Cowork, coding, tools,
 permissions, and workspace UI, while MachBoost supplies the model inference.
+This adapter remains a compatibility preview. Basic chat and tool requests are
+covered, but long Claude Code tool loops still need broader real-client testing.
 
 Connect Claude Desktop to the MachBoost server on this Mac:
 
@@ -438,7 +484,7 @@ machboost launch claude-desktop \
   --model qwen2.5-coder:7b
 ```
 
-The macOS app exposes the same flow under **Apps → Claude Desktop**, with a
+The macOS app exposes ChatGPT and Claude controls under **Apps**, with one
 picker for **This Mac** or any saved MachBoost host. Claude discovers the
 selected host's available models through `/v1/models`; requests arrive through
 `/v1/messages` and `/v1/messages/count_tokens`. MachBoost uses Claude-compatible
@@ -461,7 +507,8 @@ the first model token for a fresh session and `1.35s` after its coding prefix wa
 warm, down from `235.6s` before these gateway fixes. Because the model reasoned
 before answering, visible text arrived at `12.01s` and `3.95s` respectively.
 Those numbers describe that captured workload and machine; they are not a claim
-that every new prompt or model receives the same speedup.
+that every new prompt or model receives the same speedup, and they do not mark
+the Claude Code adapter as production-ready.
 
 MachBoost preserves the previously active Claude inference profile during this
 round trip, including an existing Ollama gateway configuration.

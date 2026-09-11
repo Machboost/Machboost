@@ -316,6 +316,109 @@ class CLITests(unittest.TestCase):
         self.assertIn("no Claude Desktop-compatible models", errors.getvalue())
         manager.configure.assert_not_called()
 
+    def test_chatgpt_launch_configures_downloaded_models_without_restarting(self):
+        output = io.StringIO()
+        manager = Mock()
+        manager.configure.return_value = {
+            "connected": True,
+            "installed": True,
+            "endpoint": "http://127.0.0.1:11435/v1",
+        }
+        manager.status.return_value = {"installed": True, "connected": True}
+        client = Mock()
+        client.catalog.return_value = [
+            {
+                "name": "local/model",
+                "cached": True,
+                "support": "ready",
+                "capabilities": ["chat", "tools"],
+            }
+        ]
+        args = cli.build_parser().parse_args(
+            ["launch", "chatgpt", "--config", "--model", "local/model"]
+        )
+
+        with (
+            patch("machboost.cli.ChatGPTProfileManager", return_value=manager),
+            patch(
+                "machboost.cli._launch_gateway",
+                return_value=("http://127.0.0.1:11435", "secret", True),
+            ),
+            patch("machboost.cli.MachBoostClient", return_value=client),
+        ):
+            code = cli.run_launch(args, output_stream=output)
+
+        self.assertEqual(code, 0)
+        manager.configure.assert_called_once()
+        self.assertEqual(manager.configure.call_args.kwargs["model"], "local/model")
+        manager.restart_application.assert_not_called()
+        self.assertIn("added to ChatGPT Desktop", output.getvalue())
+
+    def test_remote_chatgpt_launch_uses_a_loopback_credential_bridge(self):
+        manager = Mock()
+        manager.configure.return_value = {
+            "connected": True,
+            "installed": False,
+            "endpoint": "http://127.0.0.1:11437/v1",
+        }
+        manager.status.return_value = {"installed": False, "connected": True}
+        client = Mock()
+        client.catalog.return_value = [
+            {"name": "team/model", "cached": True, "support": "ready"}
+        ]
+        args = cli.build_parser().parse_args(
+            ["launch", "chatgpt", "--connection", "studio", "--config"]
+        )
+
+        with (
+            patch("machboost.cli.ChatGPTProfileManager", return_value=manager),
+            patch(
+                "machboost.cli._launch_gateway",
+                return_value=("http://studio.local:11435", "secret", False),
+            ),
+            patch("machboost.cli.MachBoostClient", return_value=client),
+            patch(
+                "machboost.cli.start_chatgpt_gateway_relay",
+                return_value="http://127.0.0.1:11437",
+            ) as start_relay,
+        ):
+            code = cli.run_launch(args, output_stream=io.StringIO())
+
+        self.assertEqual(code, 0)
+        start_relay.assert_called_once_with("http://studio.local:11435", "secret")
+        self.assertEqual(manager.configure.call_args.args[0], "http://127.0.0.1:11437")
+
+    def test_codex_launch_configures_an_isolated_profile(self):
+        output = io.StringIO()
+        manager = Mock()
+        manager.configure.return_value = {
+            "configured": True,
+            "profile": "machboost-launch",
+            "model": "local/model",
+        }
+        client = Mock()
+        client.catalog.return_value = [
+            {"name": "local/model", "cached": True, "support": "ready"}
+        ]
+        args = cli.build_parser().parse_args(
+            ["launch", "codex", "--config", "--model", "local/model"]
+        )
+
+        with (
+            patch("machboost.cli.CodexCLIProfileManager", return_value=manager),
+            patch(
+                "machboost.cli._launch_gateway",
+                return_value=("http://127.0.0.1:11435", "secret", True),
+            ),
+            patch("machboost.cli.MachBoostClient", return_value=client),
+        ):
+            code = cli.run_launch(args, output_stream=output)
+
+        self.assertEqual(code, 0)
+        manager.configure.assert_called_once()
+        manager.run.assert_not_called()
+        self.assertIn("codex --profile machboost-launch", output.getvalue())
+
     def test_model_alias_cli_parses_options_and_calls_resident_client(self):
         client = SimpleNamespace(
             create_model=lambda name, source, **kwargs: {
