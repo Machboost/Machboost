@@ -6507,18 +6507,33 @@ def integration_catalog(host: str) -> dict[str, Any]:
             },
             {
                 "id": "anthropic",
-                "name": "Anthropic SDK and Claude Code",
+                "name": "Anthropic SDK and Claude Code (preview)",
                 "environment": {
                     "ANTHROPIC_BASE_URL": endpoint,
                     "ANTHROPIC_AUTH_TOKEN": "YOUR_MACHBOOST_KEY",
                 },
             },
             {
+                "id": "chatgpt-desktop",
+                "name": "ChatGPT Desktop (Codex)",
+                "api": "responses",
+                "setup": "machboost launch chatgpt",
+                "support": "verified",
+            },
+            {
+                "id": "codex-cli",
+                "name": "Codex CLI",
+                "api": "responses",
+                "setup": "machboost launch codex",
+                "support": "verified",
+            },
+            {
                 "id": "claude-desktop",
-                "name": "Claude Desktop third-party inference",
+                "name": "Claude Desktop third-party inference (preview)",
                 "gateway_base_url": endpoint,
                 "gateway_auth_scheme": "bearer",
                 "setup": "machboost launch claude-desktop",
+                "support": "preview",
             },
             {
                 "id": "cline-kilo",
