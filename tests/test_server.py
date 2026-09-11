@@ -33,6 +33,7 @@ from machboost.server import (
     model_config,
     normalize_tools,
     openai_machboost_result,
+    openai_options,
     parse_keep_alive,
     request_affinity_key,
     result_content_and_tool_calls,
@@ -2290,6 +2291,48 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual([call["name"] for call in calls], ["read_file", "search_repo"])
         self.assertEqual(json.loads(calls[0]["arguments"])["path"], "a.py")
         self.assertEqual(self.loaded[0][1].chat_calls[0][0][0]["role"], "system")
+
+    def test_responses_endpoint_has_no_implicit_output_cap(self):
+        self.request(
+            "/v1/responses",
+            {
+                "model": "mlx-community/example",
+                "input": "Continue until the task is complete.",
+            },
+        )
+
+        self.assertEqual(self.loaded[0][1].chat_calls[0][1], -1)
+
+    def test_responses_endpoint_forwards_namespaced_codex_tools(self):
+        self.request(
+            "/v1/responses",
+            {
+                "model": "mlx-community/tool-calling",
+                "input": "Inspect the workspace.",
+                "tools": [
+                    {
+                        "type": "namespace",
+                        "name": "workspace",
+                        "tools": [
+                            {
+                                "type": "function",
+                                "name": "read_file",
+                                "parameters": {"type": "object"},
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+        tools = self.loaded[0][1].chat_calls[0][3]
+        self.assertEqual(tools[0]["function"]["name"], "workspace.read_file")
+
+    def test_openai_reasoning_none_disables_thinking(self):
+        options = openai_options({"reasoning": {"effort": "none"}})
+
+        self.assertIs(options["_think"], False)
+        self.assertNotIn("_reasoning_strength", options)
 
     def test_responses_endpoint_streams_native_sse_events(self):
         _, headers, body = self.request(
