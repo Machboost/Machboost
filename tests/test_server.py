@@ -3682,6 +3682,10 @@ class TeamGatewayHTTPTests(unittest.TestCase):
         self.assertEqual(body["schema"], "machboost.integrations.v1")
         self.assertTrue(body["openai_base_url"].endswith("/v1"))
         self.assertIn("OLLAMA_HOST", body["clients"][1]["environment"])
+        clients = {client["id"]: client for client in body["clients"]}
+        self.assertEqual(clients["chatgpt-desktop"]["api"], "responses")
+        self.assertEqual(clients["codex-cli"]["support"], "verified")
+        self.assertEqual(clients["claude-desktop"]["support"], "preview")
 
     def test_desktop_client_enrolls_and_reports_real_inference_requests(self) -> None:
         token = self.create_employee_key()
