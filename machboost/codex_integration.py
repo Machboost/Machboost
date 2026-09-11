@@ -142,7 +142,7 @@ def _codex_model_entry(row: dict[str, Any], priority: int) -> dict[str, Any]:
         "support_verbosity": False,
         "default_verbosity": None,
         "apply_patch_tool_type": None,
-        "web_search_tool_type": "text" if tool_capable else None,
+        "web_search_tool_type": None,
         "truncation_policy": {"mode": "tokens", "limit": min(10_000, context_window // 2)},
         "supports_parallel_tool_calls": tool_capable,
         "supports_image_detail_original": False,
@@ -152,7 +152,7 @@ def _codex_model_entry(row: dict[str, Any], priority: int) -> dict[str, Any]:
         "effective_context_window_percent": 90,
         "experimental_supported_tools": [],
         "input_modalities": input_modalities,
-        "supports_search_tool": tool_capable,
+        "supports_search_tool": False,
     }
 
 
@@ -353,7 +353,12 @@ class ChatGPTProfileManager:
                 break
             time.sleep(0.2)
         launched = subprocess.run(
-            ["/usr/bin/open", str(app), "--args", "codex://threads/new?mode=codex"],
+            [
+                "/usr/bin/open",
+                "-a",
+                str(app),
+                "codex://threads/new?mode=codex",
+            ],
             check=False,
             capture_output=True,
             text=True,
