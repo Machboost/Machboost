@@ -950,6 +950,11 @@ final class AppState {
             for: request.model,
             preferredHostID: preferredHostID
         )
+        let initialCandidate = candidates[0]
+        beginRequestRoute(
+            requestID: request.requestID,
+            candidate: initialCandidate
+        )
         return AsyncThrowingStream { continuation in
             let task = Task { @MainActor [weak self] in
                 guard let self else {
@@ -959,10 +964,19 @@ final class AppState {
                 var lastError: Error?
                 for (index, selected) in candidates.enumerated() {
                     if Task.isCancelled {
+                        self.endRequestRoute(
+                            requestID: request.requestID,
+                            hostID: selected.hostID
+                        )
                         continuation.finish()
                         return
                     }
-                    self.beginRequestRoute(requestID: request.requestID, candidate: selected)
+                    if index > 0 {
+                        self.beginRequestRoute(
+                            requestID: request.requestID,
+                            candidate: selected
+                        )
+                    }
                     var emittedOutput = false
                     var receivedDone = false
                     do {
