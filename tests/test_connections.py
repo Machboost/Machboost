@@ -13,6 +13,28 @@ from machboost.connections import (
 
 
 class ConnectionStoreTests(unittest.TestCase):
+    def test_app_community_token_is_available_to_cli_connection(self):
+        profile = self.store.save("studio", "http://studio.local:11435")
+        credentials = (
+            self.path.parent
+            / "Library"
+            / "Application Support"
+            / "MachBoost"
+            / "credentials.community.json"
+        )
+        credentials.parent.mkdir(parents=True)
+        credentials.write_text(
+            json.dumps({f"team-host-{profile.id.lower()}": "shared-secret"}),
+            encoding="utf-8",
+        )
+        credentials.chmod(0o600)
+
+        with (
+            patch("machboost.connections.Path.home", return_value=self.path.parent),
+            patch("machboost.connections.platform.system", return_value="Darwin"),
+        ):
+            self.assertEqual(self.store.token(profile), "shared-secret")
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.path = Path(self.temporary.name) / "connections.json"
