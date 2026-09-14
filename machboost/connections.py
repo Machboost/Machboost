@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 
 KEYCHAIN_SERVICE = "com.machboost.cli.connection"
+APP_KEYCHAIN_SERVICE = "io.machboost.MachBoost"
 PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
@@ -188,15 +189,46 @@ def set_connection_secret(profile_id: str, token: str) -> None:
 
 
 def get_connection_secret(profile_id: str) -> Optional[str]:
-    if platform.system() != "Darwin" or not Path("/usr/bin/security").exists():
+    if platform.system() != "Darwin":
         return None
+    app_account = f"team-host-{str(profile_id).lower()}"
+    community = _community_app_secret(app_account)
+    if community:
+        return community
+    if not Path("/usr/bin/security").exists():
+        return None
+    for account, service in (
+        (profile_id, KEYCHAIN_SERVICE),
+        (app_account, APP_KEYCHAIN_SERVICE),
+    ):
+        try:
+            result = _run_security(
+                ["find-generic-password", "-w", "-a", account, "-s", service]
+            )
+        except RuntimeError:
+            continue
+        if token := result.stdout.strip():
+            return token
+    return None
+
+
+def _community_app_secret(account: str) -> Optional[str]:
+    path = (
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "MachBoost"
+        / "credentials.community.json"
+    )
     try:
-        result = _run_security(
-            ["find-generic-password", "-w", "-a", profile_id, "-s", KEYCHAIN_SERVICE]
-        )
-    except RuntimeError:
+        metadata = path.stat()
+        if metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+            return None
+        values = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return None
-    return result.stdout.strip() or None
+    value = values.get(account) if isinstance(values, dict) else None
+    return str(value).strip() or None if value is not None else None
 
 
 def delete_connection_secret(profile_id: str) -> None:
