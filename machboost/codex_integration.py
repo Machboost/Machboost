@@ -120,7 +120,7 @@ def _codex_model_entry(row: dict[str, Any], priority: int) -> dict[str, Any]:
         "slug": name,
         "display_name": str(row.get("display_name") or name),
         "description": "Local or shared model served by MachBoost",
-        "default_reasoning_level": "medium" if reasoning else None,
+        "default_reasoning_level": "medium" if reasoning else "none",
         "supported_reasoning_levels": levels,
         "shell_type": "unified_exec",
         "visibility": "list",
@@ -128,21 +128,17 @@ def _codex_model_entry(row: dict[str, Any], priority: int) -> dict[str, Any]:
         "priority": priority,
         "additional_speed_tiers": [],
         "service_tiers": [],
-        "default_service_tier": None,
-        "availability_nux": None,
-        "upgrade": None,
         "base_instructions": "",
-        "model_messages": None,
         "include_skills_usage_instructions": True,
         "include_plugin_usage_instructions": True,
         "include_apps_usage_instructions": True,
         "supports_reasoning_summary_parameter": False,
         "supports_reasoning_summaries": False,
         "default_reasoning_summary": "auto",
-        "support_verbosity": False,
-        "default_verbosity": None,
-        "apply_patch_tool_type": None,
-        "web_search_tool_type": None,
+        "support_verbosity": True,
+        "default_verbosity": "low",
+        "apply_patch_tool_type": "freeform",
+        "web_search_tool_type": "text_and_image",
         "truncation_policy": {"mode": "tokens", "limit": min(10_000, context_window // 2)},
         "supports_parallel_tool_calls": tool_capable,
         "supports_image_detail_original": False,
@@ -409,14 +405,14 @@ def installed_chatgpt_application(home: Optional[Path] = None) -> Optional[Path]
 
 
 def codex_executable(home: Optional[Path] = None) -> Optional[Path]:
-    command = shutil.which("codex")
-    if command:
-        return Path(command)
     app = installed_chatgpt_application(home)
     if app is not None:
         bundled = app / "Contents" / "Resources" / "codex"
         if bundled.is_file():
             return bundled
+    command = shutil.which("codex")
+    if command:
+        return Path(command)
     return None
 
 
