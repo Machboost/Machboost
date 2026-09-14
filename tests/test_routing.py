@@ -1,4 +1,5 @@
 import unittest
+import threading
 
 from machboost.client import MachBoostAPIError
 from machboost.routing import (
@@ -65,6 +66,10 @@ class FakeHostClient:
             error = self.fixture.get("chat_error")
             if error:
                 raise error
+            if started := self.fixture.get("stream_started"):
+                started.set()
+            if release := self.fixture.get("stream_release"):
+                release.wait(timeout=2)
             for row in self.fixture.get(
                 "rows",
                 [
@@ -161,6 +166,44 @@ class HostPoolTests(unittest.TestCase):
         fabric = rows[-1]["machboost"]["fabric"]
         self.assertEqual(fabric["host_id"], "laptop")
         self.assertEqual(fabric["attempts"], 1)
+
+    def test_concurrent_streams_reserve_capacity_before_second_route(self):
+        started = threading.Event()
+        release = threading.Event()
+        pool, clients = self.pool(
+            {
+                "http://studio:11435": {"latency": 0.5},
+                "http://laptop:11435": {
+                    "latency": 0.5,
+                    "stream_started": started,
+                    "stream_release": release,
+                },
+            }
+        )
+        first_rows = []
+
+        def consume_first():
+            first_rows.extend(
+                pool.chat("coder", [{"role": "user", "content": "first"}])
+            )
+
+        worker = threading.Thread(target=consume_first)
+        worker.start()
+        self.assertTrue(started.wait(timeout=1))
+        second_rows = list(
+            pool.chat("coder", [{"role": "user", "content": "second"}])
+        )
+        release.set()
+        worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(first_rows)
+        self.assertEqual(
+            second_rows[-1]["machboost"]["fabric"]["host_id"],
+            "studio",
+        )
+        self.assertEqual(clients["http://laptop:11435"].calls, [("chat", "coder")])
+        self.assertEqual(clients["http://studio:11435"].calls, [("chat", "coder")])
 
     def test_pool_fails_over_when_selected_host_fails_before_first_event(self):
         pool, clients = self.pool(

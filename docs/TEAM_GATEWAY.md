@@ -111,7 +111,22 @@ env_key = "MACHBOOST_API_KEY"
 wire_api = "responses"
 ```
 
-Claude Code can use the Anthropic Messages route:
+MachBoost can generate and restore these settings for both supported Codex
+surfaces. The CLI launcher uses an isolated profile; the desktop launcher adds
+the selected host's downloaded models to ChatGPT's Codex workspace:
+
+```sh
+machboost launch codex
+machboost launch chatgpt
+machboost launch chatgpt --connection studio
+machboost launch chatgpt --restore
+```
+
+For a remote HTTP host, the ChatGPT launcher creates a loopback bridge and
+injects the saved team credential upstream. ChatGPT receives a localhost base
+URL and does not store the team key in its model catalog.
+
+Claude Code can use the Anthropic Messages route as a compatibility preview:
 
 ```sh
 export ANTHROPIC_BASE_URL="http://TEAM-MAC:11435"
@@ -120,7 +135,7 @@ export ANTHROPIC_MODEL="muse-glimmer:30b"
 claude
 ```
 
-Claude Desktop has a separate native third-party inference gateway. It is not
+Claude Desktop has a separate third-party inference gateway. It is not
 an MCP server. The MachBoost app exposes it under **Apps → Claude Desktop**, or
 the CLI can configure it directly:
 
@@ -145,6 +160,8 @@ plain HTTP gateways on loopback. When a saved LAN host uses HTTP, MachBoost
 therefore starts a private authenticated loopback bridge, forwards requests to
 the selected host with its saved key, and removes the bridge on restore. The
 Claude profile never receives the remote host credential.
+Long Claude Code tool loops remain preview support and should be validated with
+the chosen model before relying on them for unattended work.
 
 `GET /api/integrations` returns the same connection values for the active host.
 `POST /v1/responses`, `POST /v1/messages`, and `POST /v1/chat/completions`

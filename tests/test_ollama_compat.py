@@ -2,6 +2,7 @@ import unittest
 
 from machboost.ollama_compat import (
     apply_generate_template,
+    normalize_openai_format,
     normalize_ollama_options,
     structured_output_instruction,
     truncate_messages,
@@ -139,6 +140,39 @@ class TemplateAndFormatTests(unittest.TestCase):
             validate_structured_output("{}", schema)
         with self.assertRaisesRegex(ValueError, "invalid JSON"):
             validate_structured_output("not-json", "json")
+
+    def test_openai_chat_and_responses_formats_share_schema_normalization(self):
+        schema = {
+            "type": "object",
+            "required": ["answer"],
+            "properties": {"answer": {"type": "string"}},
+        }
+
+        self.assertEqual(
+            normalize_openai_format({"response_format": {"type": "json_object"}}),
+            "json",
+        )
+        self.assertEqual(
+            normalize_openai_format(
+                {
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {"name": "answer", "schema": schema},
+                    }
+                }
+            ),
+            schema,
+        )
+        self.assertEqual(
+            normalize_openai_format(
+                {"text": {"format": {"type": "json_schema", "schema": schema}}}
+            ),
+            schema,
+        )
+        with self.assertRaisesRegex(ValueError, "requires a schema"):
+            normalize_openai_format(
+                {"response_format": {"type": "json_schema", "json_schema": {}}}
+            )
 
 
 if __name__ == "__main__":

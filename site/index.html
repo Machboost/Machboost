@@ -137,9 +137,8 @@
       <section class="compatibility" aria-label="Supported interfaces">
         <div class="shell compatibility-inner">
           <p>Your workflow.<br /><strong>Already invited.</strong></p>
-          <span><i data-lucide="message-circle"></i>Claude Desktop</span
-          ><span><i data-lucide="square-terminal"></i>Claude Code</span
-          ><span><i data-lucide="code-2"></i>Codex</span
+          <span><i data-lucide="message-square-code"></i>ChatGPT + Codex</span
+          ><span><i data-lucide="message-circle"></i>Claude preview</span
           ><span><i data-lucide="braces"></i>OpenAI API</span
           ><span><i data-lucide="plug"></i>Ollama API</span>
         </div>
@@ -420,7 +419,7 @@
             <p class="eyebrow">04 / Bring your own workflow</p>
             <h2>Familiar commands.<br />Your own compute.</h2>
             <p>
-              Start in the terminal, connect Claude Desktop, or build on the
+              Start in the terminal, connect ChatGPT or Codex, or build on the
               same API that powers the app.
             </p>
             <ul class="protocol-list">
@@ -463,6 +462,15 @@
                 <i data-lucide="code-2"></i>Python</button
               ><button
                 role="tab"
+                id="tab-codex"
+                aria-controls="panel-codex"
+                aria-selected="false"
+                tabindex="-1"
+                type="button"
+              >
+                <i data-lucide="square-terminal"></i>Codex</button
+              ><button
+                role="tab"
                 id="tab-claude"
                 aria-controls="panel-claude"
                 aria-selected="false"
@@ -471,6 +479,39 @@
               >
                 <i data-lucide="message-circle"></i>Claude
               </button>
+            </div>
+            <div
+              id="panel-codex"
+              class="code-panel"
+              role="tabpanel"
+              aria-labelledby="tab-codex"
+              tabindex="0"
+              hidden
+            >
+              <div class="code-toolbar">
+                <span>ChatGPT Desktop + Codex CLI</span
+                ><button
+                  class="copy-button icon-button"
+                  data-copy-target="codex-code"
+                  type="button"
+                  aria-label="Copy Codex commands"
+                  title="Copy Codex commands"
+                >
+                  <i data-lucide="copy"></i>
+                </button>
+              </div>
+              <pre><code id="codex-code"><span class="code-comment"># Add resident models to ChatGPT's Codex workspace</span>
+machboost launch chatgpt
+
+<span class="code-comment"># Launch Codex CLI through an isolated MachBoost profile</span>
+machboost launch codex
+
+<span class="code-comment"># Restore ChatGPT's previous provider</span>
+machboost launch chatgpt --restore</code></pre>
+              <p class="code-footnote">
+                Uses the OpenAI Responses API. The Codex CLI profile stays
+                separate from your normal provider configuration.
+              </p>
             </div>
             <div
               id="panel-terminal"
@@ -554,7 +595,7 @@ client = OpenAI(
               hidden
             >
               <div class="code-toolbar">
-                <span>Claude Desktop gateway</span
+                <span>Claude Desktop gateway · preview</span
                 ><button
                   class="copy-button icon-button"
                   data-copy-target="claude-code"
@@ -575,9 +616,8 @@ machboost launch claude-desktop \
 <span class="code-comment"># Restore your previous provider</span>
 machboost launch claude-desktop --restore</code></pre>
               <p class="code-footnote">
-                Also available in the app's Apps view. Requires Claude Desktop
-                with third-party inference support and a compatible loaded
-                model.
+                Also available in the app's Apps view. Long Claude Code tool
+                loops remain a compatibility preview.
               </p>
             </div>
           </div>

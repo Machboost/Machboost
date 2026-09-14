@@ -121,7 +121,8 @@ final class AppState {
         self.deviceID = deviceID
         self.teamHost = selectedProfile
         self.teamHosts = storedProfiles
-        self.inferenceMode = selectedProfile == nil ? .local : storedMode
+        let initialInferenceMode: InferenceMode = selectedProfile == nil ? .local : storedMode
+        self.inferenceMode = initialInferenceMode
 #if DEBUG
         if usesUITestAPI {
             let fixture = UITestMachBoostAPI()
@@ -138,6 +139,9 @@ final class AppState {
         self.api = local
         self.inferenceAPI = local
 #endif
+        if !isTesting {
+            Self.syncCLIConnections(storedProfiles, mode: initialInferenceMode)
+        }
     }
 
     var serverIsRunning: Bool {
@@ -950,6 +954,11 @@ final class AppState {
             for: request.model,
             preferredHostID: preferredHostID
         )
+        let initialCandidate = candidates[0]
+        beginRequestRoute(
+            requestID: request.requestID,
+            candidate: initialCandidate
+        )
         return AsyncThrowingStream { continuation in
             let task = Task { @MainActor [weak self] in
                 guard let self else {
@@ -959,10 +968,19 @@ final class AppState {
                 var lastError: Error?
                 for (index, selected) in candidates.enumerated() {
                     if Task.isCancelled {
+                        self.endRequestRoute(
+                            requestID: request.requestID,
+                            hostID: selected.hostID
+                        )
                         continuation.finish()
                         return
                     }
-                    self.beginRequestRoute(requestID: request.requestID, candidate: selected)
+                    if index > 0 {
+                        self.beginRequestRoute(
+                            requestID: request.requestID,
+                            candidate: selected
+                        )
+                    }
                     var emittedOutput = false
                     var receivedDone = false
                     do {
@@ -1593,10 +1611,70 @@ final class AppState {
     private static func saveTeamProfiles(_ profiles: [TeamHostProfile]) {
         guard let data = try? JSONEncoder().encode(profiles) else { return }
         UserDefaults.standard.set(data, forKey: teamProfilesKey)
+        syncCLIConnections(
+            profiles,
+            mode: InferenceMode(
+                rawValue: UserDefaults.standard.string(forKey: inferenceModeKey) ?? "local"
+            ) ?? .local
+        )
     }
 
     private static func saveInferenceMode(_ mode: InferenceMode) {
         UserDefaults.standard.set(mode.rawValue, forKey: inferenceModeKey)
+        syncCLIConnections(loadTeamProfiles(fallback: nil), mode: mode)
+    }
+
+    private static func syncCLIConnections(
+        _ profiles: [TeamHostProfile],
+        mode: InferenceMode
+    ) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".machboost", isDirectory: true)
+        let destination = home.appendingPathComponent("connections.json")
+        let existing = (try? Data(contentsOf: destination))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let preserved = (existing?["profiles"] as? [[String: Any]] ?? []).filter { row in
+            guard let identifier = row["id"] as? String else { return false }
+            return UUID(uuidString: identifier) == nil
+        }
+        let appProfiles: [[String: Any]] = profiles.map { profile in
+            [
+                "id": profile.id.uuidString.lowercased(),
+                "name": profile.hostName,
+                "endpoint": profile.endpoint.absoluteString,
+            ]
+        }
+        let active: Any
+        if mode == .team, !profiles.isEmpty {
+            active = "auto"
+        } else if let current = existing?["active"] as? String,
+                  current == "auto" || UUID(uuidString: current) != nil {
+            active = NSNull()
+        } else {
+            active = existing?["active"] ?? NSNull()
+        }
+        let payload: [String: Any] = [
+            "schema": "machboost.connections.v2",
+            "active": active,
+            "profiles": preserved + appProfiles,
+        ]
+        do {
+            try FileManager.default.createDirectory(
+                at: home,
+                withIntermediateDirectories: true
+            )
+            let data = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            try data.write(to: destination, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: destination.path
+            )
+        } catch {
+            return
+        }
     }
 
     private static func loadDeviceID() -> String {

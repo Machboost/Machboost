@@ -56,6 +56,24 @@ def start_claude_gateway_relay(
     state_path: Optional[Path] = None,
     timeout: float = 10.0,
 ) -> tuple[str, str]:
+    return start_gateway_relay(
+        upstream,
+        upstream_token,
+        preferred_port=preferred_port,
+        state_path=state_path,
+        timeout=timeout,
+    )
+
+
+def start_gateway_relay(
+    upstream: str,
+    upstream_token: str,
+    *,
+    preferred_port: int = DEFAULT_RELAY_PORT,
+    state_path: Optional[Path] = None,
+    timeout: float = 10.0,
+    accept_any_local_auth: bool = False,
+) -> tuple[str, str]:
     upstream = _normalize_upstream(upstream)
     upstream_token = str(upstream_token).strip()
     if not upstream_token:
@@ -69,6 +87,7 @@ def start_claude_gateway_relay(
             "upstream": upstream,
             "upstream_token": upstream_token,
             "local_token": local_token,
+            "accept_any_local_auth": bool(accept_any_local_auth),
         }
     ).encode("utf-8")
     read_fd, write_fd = os.pipe()
@@ -166,11 +185,13 @@ class LoopbackRelayServer(ThreadingHTTPServer):
         upstream: str,
         upstream_token: str,
         local_token: str,
+        accept_any_local_auth: bool = False,
     ) -> None:
         super().__init__(address, LoopbackRelayHandler)
         self.upstream = urlparse(upstream)
         self.upstream_token = upstream_token
         self.local_token = local_token
+        self.accept_any_local_auth = bool(accept_any_local_auth)
 
 
 class LoopbackRelayHandler(BaseHTTPRequestHandler):
@@ -244,6 +265,8 @@ class LoopbackRelayHandler(BaseHTTPRequestHandler):
             connection.close()
 
     def _authorized(self) -> bool:
+        if self.server.accept_any_local_auth:
+            return True
         value = self.headers.get("Authorization", "")
         return secrets.compare_digest(value, f"Bearer {self.server.local_token}")
 
@@ -268,6 +291,7 @@ def serve_relay(port: int, config_fd: int) -> None:
         upstream=_normalize_upstream(str(config["upstream"])),
         upstream_token=str(config["upstream_token"]),
         local_token=str(config["local_token"]),
+        accept_any_local_auth=bool(config.get("accept_any_local_auth", False)),
     )
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     server.serve_forever(poll_interval=0.2)

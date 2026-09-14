@@ -83,6 +83,31 @@ class ClaudeLoopbackRelayTests(unittest.TestCase):
         self.assertEqual(payload["data"][0]["id"], "shared-model")
         self.assertEqual(self.upstream.authorization, "Bearer studio-secret")
 
+    def test_desktop_bridge_accepts_existing_app_auth_and_replaces_it_upstream(self):
+        relay = LoopbackRelayServer(
+            ("127.0.0.1", 0),
+            upstream=f"http://127.0.0.1:{self.upstream.server_port}",
+            upstream_token="studio-secret",
+            local_token="unused-local-secret",
+            accept_any_local_auth=True,
+        )
+        thread = threading.Thread(target=relay.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(
+                f"http://127.0.0.1:{relay.server_port}/v1/models",
+                headers={"Authorization": "Bearer existing-desktop-session"},
+            )
+            with urlopen(request) as response:
+                payload = json.load(response)
+
+            self.assertEqual(payload["data"][0]["id"], "shared-model")
+            self.assertEqual(self.upstream.authorization, "Bearer studio-secret")
+        finally:
+            relay.shutdown()
+            relay.server_close()
+            thread.join(3)
+
     def test_post_body_and_streamed_response_are_forwarded(self):
         body = b'{"model":"shared-model","stream":true}'
         request = Request(

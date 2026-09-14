@@ -200,6 +200,34 @@ def normalize_format(value: Any) -> Any:
     raise ValueError("format must be 'json' or a JSON Schema object")
 
 
+def normalize_openai_format(payload: dict[str, Any]) -> Any:
+    specification = payload.get("response_format")
+    if specification is None:
+        text = payload.get("text")
+        if isinstance(text, dict):
+            specification = text.get("format")
+    if specification is None:
+        return None
+    if not isinstance(specification, dict):
+        raise ValueError("response format must be an object")
+
+    format_type = str(specification.get("type") or "text")
+    if format_type == "text":
+        return None
+    if format_type == "json_object":
+        return "json"
+    if format_type != "json_schema":
+        raise ValueError(f"unsupported response format type: {format_type}")
+
+    schema = specification.get("schema")
+    envelope = specification.get("json_schema")
+    if schema is None and isinstance(envelope, dict):
+        schema = envelope.get("schema")
+    if not isinstance(schema, dict):
+        raise ValueError("json_schema response format requires a schema object")
+    return normalize_format(schema)
+
+
 def _validate_options(options: dict[str, Any]) -> None:
     integer_minimums = {
         "num_ctx": 1,

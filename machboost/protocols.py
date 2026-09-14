@@ -97,6 +97,44 @@ def responses_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
                     ],
                 }
             )
+        elif item_type == "custom_tool_call":
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": str(item.get("call_id") or item.get("id") or ""),
+                            "type": "function",
+                            "function": {
+                                "name": str(item.get("name") or ""),
+                                "arguments": json.dumps(
+                                    {"input": str(item.get("input") or "")},
+                                    separators=(",", ":"),
+                                ),
+                            },
+                        }
+                    ],
+                }
+            )
+        elif item_type == "custom_tool_call_output":
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(item.get("call_id") or item.get("id") or ""),
+                    "content": str(item.get("output") or ""),
+                }
+            )
+        elif item_type in {
+            "reasoning",
+            "compaction",
+            "compaction_trigger",
+            "tool_search_call",
+            "tool_search_output",
+        }:
+            # Codex can retain provider-specific control items between turns. They
+            # are transport state, not user-visible conversation messages.
+            continue
         else:
             raise ValueError(f"unsupported Responses input item: {item_type}")
     return messages
@@ -107,22 +145,46 @@ def responses_tools(tools: Any) -> list[dict[str, Any]]:
         return []
     if not isinstance(tools, list):
         raise ValueError("Responses tools must be a list")
-    result = []
+    result: list[dict[str, Any]] = []
     for tool in tools:
-        if not isinstance(tool, dict) or tool.get("type") != "function":
+        if not isinstance(tool, dict):
             continue
-        result.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": str(tool.get("name") or ""),
-                    "description": str(tool.get("description") or ""),
-                    "parameters": tool.get("parameters")
-                    or {"type": "object", "properties": {}},
-                },
-            }
-        )
+        tool_type = str(tool.get("type") or "function")
+        if tool_type == "namespace":
+            namespace = str(tool.get("name") or "")
+            for member in responses_tools(tool.get("tools") or []):
+                function = member.get("function") or {}
+                function["name"] = _qualified_responses_tool_name(
+                    namespace, str(function.get("name") or "")
+                )
+                result.append(member)
+            continue
+        if tool_type != "function":
+            continue
+        result.append(_responses_function_tool(tool))
     return result
+
+
+def _responses_function_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": str(tool.get("name") or ""),
+            "description": str(tool.get("description") or ""),
+            "parameters": tool.get("parameters")
+            or {"type": "object", "properties": {}},
+        },
+    }
+
+
+def _qualified_responses_tool_name(namespace: str, member: str) -> str:
+    if not namespace or not member:
+        return member
+    if member.startswith(f"{namespace}.") or member.startswith(f"{namespace}_"):
+        return member
+    if member.startswith("_"):
+        return namespace + member
+    return f"{namespace}.{member}"
 
 
 def anthropic_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:

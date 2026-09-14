@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import plistlib
 import stat
 import subprocess
 import sys
@@ -980,6 +981,58 @@ def api_error(exc: Exception) -> MachBoostAPIError:
     return MachBoostAPIError(str(exc))
 
 
+def _installed_machboost_app(version: str) -> Optional[Path]:
+    if platform.system() != "Darwin" or os.environ.get("MACHBOOST_NO_APP_AUTOSTART"):
+        return None
+    override = os.environ.get("MACHBOOST_APP_PATH", "").strip()
+    locations = (
+        (Path(override).expanduser(),) if override else (
+            Path("/Applications/MachBoost.app"),
+            Path.home() / "Applications" / "MachBoost.app",
+        )
+    )
+    for app in locations:
+        info_path = app / "Contents" / "Info.plist"
+        try:
+            with info_path.open("rb") as handle:
+                info = plistlib.load(handle)
+        except (OSError, plistlib.InvalidFileException):
+            continue
+        if str(info.get("CFBundleShortVersionString") or "") == str(version):
+            return app
+    return None
+
+
+def _wake_machboost_app(
+    app: Path,
+    client: MachBoostClient,
+    *,
+    version: str,
+    timeout: float,
+) -> bool:
+    result = subprocess.run(
+        ["/usr/bin/open", "-gj", str(app)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        return False
+    deadline = time.monotonic() + max(0.0, timeout)
+    while time.monotonic() < deadline:
+        try:
+            health = client.health()
+        except MachBoostAPIError:
+            health = {}
+        if (
+            health.get("status") == "ok"
+            and str(health.get("version") or "unknown") == version
+        ):
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def ensure_server(
     endpoint: Optional[str] = None,
     *,
@@ -1019,6 +1072,15 @@ def ensure_server(
 
     if not is_local:
         raise MachBoostAPIError(f"refusing to auto-start a server for non-local endpoint {client.endpoint!r}")
+
+    app = _installed_machboost_app(__version__)
+    if app is not None and _wake_machboost_app(
+        app,
+        client,
+        version=__version__,
+        timeout=min(12.0, timeout),
+    ):
+        return client, True
 
     cache_dir = Path.home() / ".cache" / "machboost"
     cache_dir.mkdir(parents=True, exist_ok=True)

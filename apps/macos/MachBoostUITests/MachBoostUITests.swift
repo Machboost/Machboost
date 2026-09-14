@@ -23,21 +23,29 @@ final class MachBoostUITests: XCTestCase {
     }
 
     @MainActor
-    func testAppsViewOffersClaudeDesktopGatewayControls() {
+    func testAppsViewOffersVerifiedCodexAndPreviewClaudeControls() {
         let app = launchApp()
         let appsItem = app.staticTexts["Apps"]
 
         XCTAssertTrue(appsItem.waitForExistence(timeout: 10))
         appsItem.click()
 
+        XCTAssertTrue(app.staticTexts["ChatGPT (Codex)"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Claude Desktop"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Codex CLI"].exists)
+        XCTAssertTrue(app.staticTexts["Claude Code"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["chatgpt-desktop-toggle"].exists
+        )
         XCTAssertTrue(
             app.descendants(matching: .any)["claude-desktop-toggle"].exists
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["claude-desktop-host-picker"].exists
+            app.descendants(matching: .any)["apps-host-picker"].exists
         )
         XCTAssertTrue(app.staticTexts["Inference host"].exists)
+        XCTAssertTrue(app.staticTexts["Verified"].exists)
+        XCTAssertTrue(app.staticTexts["Preview"].exists)
     }
 
     @MainActor

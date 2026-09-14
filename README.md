@@ -106,7 +106,7 @@ python -m pip install -e ".[mlx]"
 ```
 
 An exact tagged source release can also be installed with
-`python -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.23"`.
+`python -m pip install "machboost[mlx] @ git+https://github.com/Machboost/Machboost.git@v0.16.24"`.
 
 Check the install:
 
@@ -411,11 +411,57 @@ curl http://127.0.0.1:11435/api/chat -d '{
 }'
 ```
 
-### Claude Desktop
+### ChatGPT Desktop and Codex
 
-Claude Desktop can use MachBoost as its native third-party inference gateway.
+MachBoost can provide local or shared models to the current ChatGPT macOS app's
+Codex workspace and to Codex CLI. Both integrations use the OpenAI Responses
+API; they do not use MCP for inference.
+
+Connect the ChatGPT app to the resident models on this Mac:
+
+```sh
+machboost launch chatgpt
+```
+
+Connect it to models on a saved MachBoost host, or restore the app's previous
+configuration:
+
+```sh
+machboost launch chatgpt --connection studio
+machboost launch chatgpt --restore
+```
+
+Launch Codex CLI with an isolated MachBoost profile:
+
+```sh
+machboost launch codex
+
+# Forward normal Codex arguments after --.
+machboost launch codex -- --cd ./my-repo --sandbox workspace-write
+```
+
+The Codex launcher writes a separate `machboost-launch` profile and model
+catalog under `~/.codex`; it does not replace the user's normal Codex provider.
+The ChatGPT launcher changes only the root model, catalog, and base-URL values
+needed by the app, records their previous values, and restores them with the
+command above. A shared HTTP host is reached through an authenticated loopback
+bridge so ChatGPT still connects to localhost and the team key is not stored in
+its model profile.
+
+End-to-end validation uses the Codex executable bundled with ChatGPT, not a
+mock client. In the repository smoke test, resident Muse Glimmer requested a
+shell command, Codex executed it, MachBoost accepted the tool result, and the
+model completed the second turn with the correct directory. Model quality and
+latency still depend on the selected local model; this integration does not
+make a small non-tool-tuned model behave like a hosted coding model.
+
+### Claude Desktop (preview)
+
+Claude Desktop can use MachBoost through its third-party inference gateway.
 This is not an MCP connection: Claude keeps its chat, Cowork, coding, tools,
 permissions, and workspace UI, while MachBoost supplies the model inference.
+This adapter remains a compatibility preview. Basic chat and tool requests are
+covered, but long Claude Code tool loops still need broader real-client testing.
 
 Connect Claude Desktop to the MachBoost server on this Mac:
 
@@ -438,7 +484,7 @@ machboost launch claude-desktop \
   --model qwen2.5-coder:7b
 ```
 
-The macOS app exposes the same flow under **Apps → Claude Desktop**, with a
+The macOS app exposes ChatGPT and Claude controls under **Apps**, with one
 picker for **This Mac** or any saved MachBoost host. Claude discovers the
 selected host's available models through `/v1/models`; requests arrive through
 `/v1/messages` and `/v1/messages/count_tokens`. MachBoost uses Claude-compatible
@@ -461,7 +507,8 @@ the first model token for a fresh session and `1.35s` after its coding prefix wa
 warm, down from `235.6s` before these gateway fixes. Because the model reasoned
 before answering, visible text arrived at `12.01s` and `3.95s` respectively.
 Those numbers describe that captured workload and machine; they are not a claim
-that every new prompt or model receives the same speedup.
+that every new prompt or model receives the same speedup, and they do not mark
+the Claude Code adapter as production-ready.
 
 MachBoost preserves the previously active Claude inference profile during this
 round trip, including an existing Ollama gateway configuration.
@@ -671,10 +718,10 @@ To connect from another machine, enable authenticated LAN access under
 **Server → Developer** and use the displayed address instead of loopback:
 
 ```sh
-export OPENAI_BASE_URL="http://192.168.1.50:11435/v1"
+export OPENAI_BASE_URL="http://studio.local:11435/v1"
 export OPENAI_API_KEY="YOUR_MACHBOOST_KEY"
-export OLLAMA_HOST="http://192.168.1.50:11435"
-export ANTHROPIC_BASE_URL="http://192.168.1.50:11435"
+export OLLAMA_HOST="http://studio.local:11435"
+export ANTHROPIC_BASE_URL="http://studio.local:11435"
 export ANTHROPIC_AUTH_TOKEN="YOUR_MACHBOOST_KEY"
 ```
 
@@ -683,7 +730,7 @@ The token prompt writes to macOS Keychain; the profile file contains only the
 name and endpoint:
 
 ```sh
-machboost connect 192.168.1.50:11435 --name studio
+machboost connect studio.local:11435 --name studio
 machboost connections --probe --model qwen2.5:7b
 machboost use auto
 machboost run qwen2.5:7b
@@ -697,12 +744,21 @@ Saving a host enables automatic routing by default. In `auto` mode, the CLI
 probes this machine and every saved host concurrently, checks whether the
 requested model is cached and resident, and estimates completion time from
 round-trip latency, replicas, active requests, queued requests, and requests
-already reserved by this client. A transient failure is retried on the next
+already reserved by this client. Host selection and reservation are atomic, so
+simultaneous requests from one app or CLI process spread across available
+one-replica hosts instead of all choosing the same idle target. A transient failure is retried on the next
 ranked host only when no output has been emitted; a response is never replayed
 mid-stream. `machboost connections --probe --model MODEL` prints the live
 ranking, and `/route` shows it inside interactive chat. The connection profile
 format is portable; non-macOS clients can provide a saved host key through
 `MACHBOOST_API_TOKEN_<CONNECTION_NAME>`.
+
+The macOS app and CLI share the localhost gateway, model processes, cache,
+queues, metrics, and `~/.machboost/connections.json` host registry. Starting a
+local CLI command wakes a matching installed MachBoost app in the background;
+if the app cannot launch, the CLI starts the same resident server headlessly.
+Hosts connected in the app therefore participate in `machboost use auto`
+without a second model load or duplicate host setup.
 
 The address above is illustrative; the app displays the current host Mac's
 reachable LAN address. The client and server must be able to reach each other
@@ -1182,6 +1238,15 @@ embeddings, images, tools, streaming, cancellation, and keep-alive behavior.
 output is validated after generation. Context limits are enforced with the
 loaded tokenizer, preserving system content and the latest user turn while
 dropping older turns when truncation is enabled.
+
+The native CLI uses that same validator. `json` requires any valid JSON value;
+an inline schema or `@schema.json` additionally enforces the schema after
+generation:
+
+```sh
+machboost complete qwen2.5:7b "Return a deployment status." --format json
+machboost complete qwen2.5:7b "Return a deployment status." --format @schema.json
+```
 
 Useful native options:
 
