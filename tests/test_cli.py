@@ -612,6 +612,27 @@ class CLITests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     cli.build_parser().parse_args(["run", "example/model", "--max-tokens", value])
 
+    def test_structured_output_accepts_json_inline_schema_and_schema_file(self):
+        schema = {"type": "object", "required": ["answer"]}
+        inline = cli.build_parser().parse_args(
+            ["run", "example/model", "--format", json.dumps(schema)]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schema.json"
+            path.write_text(json.dumps(schema), encoding="utf-8")
+            from_file = cli.build_parser().parse_args(
+                ["complete", "example/model", "hello", "--format", f"@{path}"]
+            )
+
+        self.assertEqual(
+            cli.build_parser().parse_args(
+                ["run", "example/model", "--format", "json"]
+            ).format,
+            "json",
+        )
+        self.assertEqual(inline.format, schema)
+        self.assertEqual(from_file.format, schema)
+
     def test_reasoning_only_notice_does_not_invent_a_cap(self):
         self.assertIn("output cap", cli.reasoning_only_notice(128, 128))
         self.assertNotIn("output cap", cli.reasoning_only_notice(-1, 256))
@@ -1575,6 +1596,27 @@ class CLITests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(client.generate_calls[0][5], ["fixture.png"])
 
+    def test_resident_completion_forwards_structured_output_schema(self):
+        client = FakeResidentClient()
+        schema = {"type": "object", "required": ["answer"]}
+
+        with patch.object(cli, "connect_resident", return_value=client):
+            code = cli.run_resident_completion(
+                cli.build_parser().parse_args(
+                    [
+                        "complete",
+                        "example/model",
+                        "Answer this.",
+                        "--format",
+                        json.dumps(schema),
+                    ]
+                ),
+                output_stream=io.StringIO(),
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(client.generate_calls[0][6], schema)
+
     def test_resident_visual_chat_samples_video_frames(self):
         prompts = iter(["What changes?", "/bye"])
         client = FakeResidentClient()
@@ -1680,8 +1722,21 @@ class FakeResidentClient:
     def show(self, model, *, preflight, backend):
         return {"preflight": {"capabilities": ["chat", "completion"]}}
 
-    def chat(self, model, messages, *, options, keep_alive, stream, images=None, machboost=None):
-        self.chat_calls.append((model, messages, options, keep_alive, stream, images, machboost))
+    def chat(
+        self,
+        model,
+        messages,
+        *,
+        options,
+        keep_alive,
+        stream,
+        images=None,
+        machboost=None,
+        format=None,
+    ):
+        self.chat_calls.append(
+            (model, messages, options, keep_alive, stream, images, machboost, format)
+        )
         backend = "mlx-vlm" if images else "mlx"
         stats = {
             "generated_tokens": 2,
@@ -1725,8 +1780,20 @@ class FakeResidentClient:
             ]
         )
 
-    def generate(self, model, prompt, *, options, keep_alive, stream, images=None):
-        self.generate_calls.append((model, prompt, options, keep_alive, stream, images))
+    def generate(
+        self,
+        model,
+        prompt,
+        *,
+        options,
+        keep_alive,
+        stream,
+        images=None,
+        format=None,
+    ):
+        self.generate_calls.append(
+            (model, prompt, options, keep_alive, stream, images, format)
+        )
         return iter(
             [
                 {"response": "completion", "done": False},
