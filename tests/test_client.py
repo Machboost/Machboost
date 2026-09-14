@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import io
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -626,6 +627,75 @@ class ClientTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_ensure_server_wakes_matching_installed_app_before_spawning_daemon(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "MachBoost.app"
+            info = app / "Contents" / "Info.plist"
+            info.parent.mkdir(parents=True)
+            with info.open("wb") as handle:
+                import plistlib
+
+                plistlib.dump({"CFBundleShortVersionString": __version__}, handle)
+            with (
+                patch("machboost.client.platform.system", return_value="Darwin"),
+                patch.dict(os.environ, {"MACHBOOST_APP_PATH": str(app)}),
+                patch(
+                    "machboost.client.MachBoostClient.health",
+                    side_effect=[
+                        MachBoostAPIError("not running"),
+                        {"status": "ok", "version": __version__},
+                    ],
+                ),
+                patch("machboost.client.subprocess.run", return_value=Mock(returncode=0)) as run,
+                patch("machboost.client.subprocess.Popen") as popen,
+            ):
+                client, started = ensure_server("http://127.0.0.1:11435", timeout=1.0)
+
+        self.assertTrue(started)
+        self.assertEqual(client.endpoint, "http://127.0.0.1:11435")
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-gj", str(app)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        popen.assert_not_called()
+
+    def test_ensure_server_skips_installed_app_with_different_version(self):
+        process = Mock(pid=4321)
+        process.poll.return_value = None
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            app = home / "MachBoost.app"
+            info = app / "Contents" / "Info.plist"
+            info.parent.mkdir(parents=True)
+            with info.open("wb") as handle:
+                import plistlib
+
+                plistlib.dump({"CFBundleShortVersionString": "0.1.0"}, handle)
+            with (
+                patch("machboost.client.Path.home", return_value=home),
+                patch("machboost.client.platform.system", return_value="Darwin"),
+                patch.dict(os.environ, {"MACHBOOST_APP_PATH": str(app)}),
+                patch(
+                    "machboost.client.MachBoostClient.health",
+                    side_effect=[
+                        MachBoostAPIError("not running"),
+                        {"status": "ok", "version": __version__},
+                    ],
+                ),
+                patch("machboost.client.subprocess.run") as run,
+                patch("machboost.client.subprocess.Popen", return_value=process),
+            ):
+                _, started = ensure_server(
+                    "http://127.0.0.1:11435",
+                    timeout=1.0,
+                    log_path=home / "server.log",
+                )
+
+        self.assertTrue(started)
+        run.assert_not_called()
+
     def test_ensure_server_starts_local_daemon_and_writes_pid(self):
         process = Mock(pid=4321)
         process.poll.return_value = None
