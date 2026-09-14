@@ -2216,6 +2216,8 @@ def run_resident_chat(
                     "keep_alive": args.keep_alive,
                     "stream": True,
                 }
+                if args.format is not None:
+                    request_options["format"] = args.format
                 if active_images:
                     request_options["images"] = active_images
                 route = chat_route_options(args)
@@ -2426,6 +2428,8 @@ def run_resident_completion(args: argparse.Namespace, *, output_stream=None, err
             "keep_alive": args.keep_alive,
             "stream": True,
         }
+        if args.format is not None:
+            request_options["format"] = args.format
         if images:
             request_options["images"] = images
         rows = client.generate(args.model, prompt, **request_options)
@@ -3641,6 +3645,23 @@ def output_token_argument(value: str) -> int:
     return parsed
 
 
+def structured_output_argument(value: str):
+    raw = str(value).strip()
+    if raw == "json":
+        return "json"
+    if raw.startswith("@"):
+        raw = Path(raw[1:]).expanduser().read_text(encoding="utf-8")
+    try:
+        schema = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise argparse.ArgumentTypeError(
+            "format must be 'json', an inline JSON Schema, or @schema.json"
+        ) from exc
+    if not isinstance(schema, dict):
+        raise argparse.ArgumentTypeError("JSON Schema format must be an object")
+    return schema
+
+
 def add_native_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "model",
@@ -3670,6 +3691,11 @@ def add_native_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-tokens", type=output_token_argument, default=-1,
         help="Output token cap; default -1 runs until EOS, cancellation, or the model context limit.",
+    )
+    parser.add_argument(
+        "--format",
+        type=structured_output_argument,
+        help="Return valid JSON, or validate against an inline schema or @schema.json.",
     )
     parser.add_argument(
         "--ctx",
