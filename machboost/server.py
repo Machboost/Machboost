@@ -44,6 +44,7 @@ from .models import (
 )
 from .ollama_compat import (
     apply_generate_template,
+    normalize_openai_format,
     normalize_ollama_options,
     structured_output_instruction,
     truncate_messages,
@@ -5597,6 +5598,9 @@ def ollama_mlx_generation_options(options: dict[str, Any]) -> dict[str, Any]:
 
 def openai_options(payload: dict[str, Any]) -> dict[str, Any]:
     options = dict(payload.get("machboost_options") or {})
+    response_format = normalize_openai_format(payload)
+    if response_format is not None:
+        options["_format"] = response_format
     if "max_tokens" in payload:
         options["max_tokens"] = payload["max_tokens"]
     for key in (
