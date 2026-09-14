@@ -58,6 +58,9 @@ jobs:
         run: |
           python -m pip install -e .
           curl --fail --location --silent --show-error \
+            --retry 4 \
+            --retry-all-errors \
+            --retry-delay 2 \
             --output "$RUNNER_TEMP/xcodegen.zip" \
             https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
           echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" \
@@ -73,6 +76,19 @@ jobs:
         run: |
           find scripts -type f -name '*.sh' -print0 \
             | xargs -0 -n1 bash -n
+      - name: Resolve native dependencies
+        run: |
+          for attempt in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/SourcePackages" "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+            if xcodebuild -resolvePackageDependencies \
+              -project apps/macos/MachBoost.xcodeproj \
+              -scheme MachBoost \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          exit 1
       - name: Run native unit tests
         env:
           MACHBOOST_SOURCE_ROOT: ${{ github.workspace }}
@@ -83,6 +99,8 @@ jobs:
             -scheme MachBoost \
             -configuration Debug \
             -destination 'platform=macOS,arch=arm64' \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
             -only-testing:MachBoostTests \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGN_STYLE=Manual \
@@ -97,6 +115,8 @@ jobs:
             -scheme MachBoost \
             -configuration Debug \
             -destination 'platform=macOS,arch=arm64' \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
             -only-testing:MachBoostUITests \
             CODE_SIGN_IDENTITY=- \
             CODE_SIGN_STYLE=Manual \
