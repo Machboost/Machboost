@@ -718,10 +718,10 @@ To connect from another machine, enable authenticated LAN access under
 **Server → Developer** and use the displayed address instead of loopback:
 
 ```sh
-export OPENAI_BASE_URL="http://192.168.1.50:11435/v1"
+export OPENAI_BASE_URL="http://studio.local:11435/v1"
 export OPENAI_API_KEY="YOUR_MACHBOOST_KEY"
-export OLLAMA_HOST="http://192.168.1.50:11435"
-export ANTHROPIC_BASE_URL="http://192.168.1.50:11435"
+export OLLAMA_HOST="http://studio.local:11435"
+export ANTHROPIC_BASE_URL="http://studio.local:11435"
 export ANTHROPIC_AUTH_TOKEN="YOUR_MACHBOOST_KEY"
 ```
 
@@ -730,7 +730,7 @@ The token prompt writes to macOS Keychain; the profile file contains only the
 name and endpoint:
 
 ```sh
-machboost connect 192.168.1.50:11435 --name studio
+machboost connect studio.local:11435 --name studio
 machboost connections --probe --model qwen2.5:7b
 machboost use auto
 machboost run qwen2.5:7b
@@ -744,12 +744,21 @@ Saving a host enables automatic routing by default. In `auto` mode, the CLI
 probes this machine and every saved host concurrently, checks whether the
 requested model is cached and resident, and estimates completion time from
 round-trip latency, replicas, active requests, queued requests, and requests
-already reserved by this client. A transient failure is retried on the next
+already reserved by this client. Host selection and reservation are atomic, so
+simultaneous requests from one app or CLI process spread across available
+one-replica hosts instead of all choosing the same idle target. A transient failure is retried on the next
 ranked host only when no output has been emitted; a response is never replayed
 mid-stream. `machboost connections --probe --model MODEL` prints the live
 ranking, and `/route` shows it inside interactive chat. The connection profile
 format is portable; non-macOS clients can provide a saved host key through
 `MACHBOOST_API_TOKEN_<CONNECTION_NAME>`.
+
+The macOS app and CLI share the localhost gateway, model processes, cache,
+queues, metrics, and `~/.machboost/connections.json` host registry. Starting a
+local CLI command wakes a matching installed MachBoost app in the background;
+if the app cannot launch, the CLI starts the same resident server headlessly.
+Hosts connected in the app therefore participate in `machboost use auto`
+without a second model load or duplicate host setup.
 
 The address above is illustrative; the app displays the current host Mac's
 reachable LAN address. The client and server must be able to reach each other
@@ -1229,6 +1238,15 @@ embeddings, images, tools, streaming, cancellation, and keep-alive behavior.
 output is validated after generation. Context limits are enforced with the
 loaded tokenizer, preserving system content and the latest user turn while
 dropping older turns when truncation is enabled.
+
+The native CLI uses that same validator. `json` requires any valid JSON value;
+an inline schema or `@schema.json` additionally enforces the schema after
+generation:
+
+```sh
+machboost complete qwen2.5:7b "Return a deployment status." --format json
+machboost complete qwen2.5:7b "Return a deployment status." --format @schema.json
+```
 
 Useful native options:
 
