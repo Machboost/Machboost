@@ -241,15 +241,13 @@ class MachBoostHostPool:
         attempted: list[str] = []
         last_error: Optional[Exception] = None
         while True:
-            candidates = self.ranked(model, exclude=attempted)
-            if not candidates:
+            probe = self._select_and_reserve(model, exclude=attempted)
+            if probe is None:
                 if last_error is not None:
                     raise last_error
                 raise MachBoostAPIError(f"no healthy MachBoost host has {model} ready")
-            probe = candidates[0]
             attempted.append(probe.target.id)
             runtime = self._runtimes[probe.target.id]
-            self._reserve(runtime)
             emitted = False
             started = self.clock()
             try:
@@ -274,6 +272,29 @@ class MachBoostHostPool:
                     raise
             finally:
                 self._release(runtime)
+
+    def _select_and_reserve(
+        self,
+        model: str,
+        *,
+        exclude: Sequence[str] = (),
+    ) -> Optional[HostProbe]:
+        candidates = self.ranked(model, exclude=exclude)
+        if not candidates:
+            return None
+        # Ranking and reservation must be one decision. Otherwise concurrent
+        # requests can all observe the same idle host before any is counted.
+        with self._lock:
+            candidates = sorted(
+                (
+                    self._rescore(probe, self._runtimes[probe.target.id])
+                    for probe in candidates
+                ),
+                key=lambda item: (item.score, item.target.name.lower()),
+            )
+            selected = candidates[0]
+            self._reserve(self._runtimes[selected.target.id])
+            return selected
 
     def _call_with_failover(
         self,
