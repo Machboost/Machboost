@@ -2334,6 +2334,28 @@ class HTTPServerTests(unittest.TestCase):
         self.assertIs(options["_think"], False)
         self.assertNotIn("_reasoning_strength", options)
 
+    def test_openai_options_forward_json_schema_to_native_runtime(self):
+        schema = {
+            "type": "object",
+            "required": ["answer"],
+            "properties": {"answer": {"type": "string"}},
+        }
+
+        chat = openai_options(
+            {
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": "answer", "schema": schema},
+                }
+            }
+        )
+        responses = openai_options(
+            {"text": {"format": {"type": "json_schema", "schema": schema}}}
+        )
+
+        self.assertEqual(chat["_format"], schema)
+        self.assertEqual(responses["_format"], schema)
+
     def test_responses_endpoint_streams_native_sse_events(self):
         _, headers, body = self.request(
             "/v1/responses",
