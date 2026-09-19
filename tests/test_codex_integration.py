@@ -12,6 +12,7 @@ from machboost.codex_integration import (
     CODEX_PROFILE_NAME,
     ChatGPTProfileManager,
     CodexCLIProfileManager,
+    codex_executable,
     codex_model_catalog,
     runnable_model_rows,
     select_model_rows,
@@ -53,6 +54,34 @@ class CodexModelCatalogTests(unittest.TestCase):
 
         self.assertEqual(rows[0]["name"], "team/custom-model")
         self.assertIn("tools", rows[0]["capabilities"])
+
+    def test_catalog_never_serializes_null_typed_fields(self):
+        catalog = codex_model_catalog(
+            [{"name": "plain-model", "capabilities": ["chat"]}]
+        )
+
+        model = catalog["models"][0]
+        self.assertEqual(model["default_reasoning_level"], "none")
+        self.assertEqual(model["default_verbosity"], "low")
+        self.assertEqual(model["apply_patch_tool_type"], "freeform")
+        self.assertEqual(model["web_search_tool_type"], "text_and_image")
+        self.assertNotIn(None, model.values())
+
+    def test_bundled_codex_is_preferred_over_path_wrapper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / "ChatGPT.app"
+            bundled = app / "Contents" / "Resources" / "codex"
+            bundled.parent.mkdir(parents=True)
+            bundled.touch()
+
+            with patch(
+                "machboost.codex_integration.installed_chatgpt_application",
+                return_value=app,
+            ), patch(
+                "machboost.codex_integration.shutil.which",
+                return_value="/usr/local/bin/codex",
+            ):
+                self.assertEqual(codex_executable(), bundled)
 
 
 class CodexCLIProfileTests(unittest.TestCase):
