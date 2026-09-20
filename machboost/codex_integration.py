@@ -191,6 +191,7 @@ class CodexCLIProfileManager:
             f'base_url = {json.dumps(endpoint)}\n'
             'env_key = "MACHBOOST_API_TOKEN"\n'
             'wire_api = "responses"\n'
+            'supports_websockets = false\n'
             'stream_idle_timeout_ms = 300000\n'
         )
         _validate_toml(profile)
@@ -253,6 +254,7 @@ class CodexCLIProfileManager:
 
 class ChatGPTProfileManager:
     managed_keys = ("profile", "model", "model_provider", "model_catalog_json", "openai_base_url")
+    provider_table = "model_providers.machboost-desktop"
 
     def __init__(
         self,
@@ -288,10 +290,20 @@ class ChatGPTProfileManager:
             text = _remove_root_assignment(text, key)
         for key, value in (
             ("model", primary),
+            ("model_provider", "machboost-desktop"),
             ("model_catalog_json", str(self.catalog_path)),
             ("openai_base_url", base_url),
         ):
             text = _set_root_string(text, key, value)
+        text = self._replace_provider(text, (
+            f'[{self.provider_table}]\n'
+            'name = "MachBoost"\n'
+            f'base_url = {json.dumps(base_url)}\n'
+            'wire_api = "responses"\n'
+            'requires_openai_auth = false\n'
+            'supports_websockets = false\n'
+            'stream_idle_timeout_ms = 300000\n'
+        ))
         _validate_toml(text)
         _write_json(self.catalog_path, codex_model_catalog(selected_rows))
         _write_text(self.config_path, text)
@@ -317,6 +329,7 @@ class ChatGPTProfileManager:
         text = self.config_path.read_text(encoding="utf-8") if self.config_path.exists() else ""
         state = _read_json(self.state_path)
         values = state.get("values") if state.get("schema") == CHATGPT_STATE_SCHEMA else {}
+        text = self._replace_provider(text, str(state.get("provider_section") or ""))
         for key in self.managed_keys:
             snapshot = values.get(key) if isinstance(values, dict) else None
             if isinstance(snapshot, dict) and snapshot.get("present"):
@@ -377,7 +390,21 @@ class ChatGPTProfileManager:
             key: {"present": key in config, "value": config.get(key)}
             for key in self.managed_keys
         }
-        _write_json(self.state_path, {"schema": CHATGPT_STATE_SCHEMA, "values": values})
+        text = self.config_path.read_text(encoding="utf-8") if self.config_path.exists() else ""
+        section = self._provider_pattern().search(text)
+        _write_json(self.state_path, {
+            "schema": CHATGPT_STATE_SCHEMA, "values": values,
+            "provider_section": section.group(0) if section else "",
+        })
+
+    @classmethod
+    def _provider_pattern(cls):
+        return re.compile(r"(?ms)^\[" + re.escape(cls.provider_table) + r"\][^\n]*\n.*?(?=^\[|\Z)")
+
+    @classmethod
+    def _replace_provider(cls, text: str, section: str) -> str:
+        text = cls._provider_pattern().sub("", text)
+        return text.rstrip() + "\n\n" + section if section else text
 
 
 def start_chatgpt_gateway_relay(upstream: str, token: str) -> str:

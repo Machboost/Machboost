@@ -145,6 +145,11 @@ class ChatGPTProfileTests(unittest.TestCase):
             self.assertTrue(connected["connected"])
             self.assertEqual(parsed["model"], "local/model")
             self.assertEqual(parsed["openai_base_url"], "http://127.0.0.1:11435/v1")
+            self.assertEqual(parsed["model_provider"], "machboost-desktop")
+            provider = parsed["model_providers"]["machboost-desktop"]
+            self.assertFalse(provider["supports_websockets"])
+            self.assertFalse(provider["requires_openai_auth"])
+            self.assertEqual(provider["wire_api"], "responses")
             self.assertEqual(parsed["notify"], ["say", "done"])
             self.assertTrue(parsed["features"]["apps"])
             self.assertEqual(json.loads(state.read_text())["schema"], CHATGPT_STATE_SCHEMA)
@@ -155,6 +160,7 @@ class ChatGPTProfileTests(unittest.TestCase):
             self.assertFalse(restored["connected"])
             self.assertEqual(parsed["model"], "openai-model")
             self.assertNotIn("openai_base_url", parsed)
+            self.assertNotIn("machboost-desktop", parsed.get("model_providers", {}))
             self.assertEqual(parsed["notify"], ["say", "done"])
             self.assertTrue(parsed["features"]["apps"])
 

@@ -345,11 +345,17 @@ class CLITests(unittest.TestCase):
                 return_value=("http://127.0.0.1:11435", "secret", True),
             ),
             patch("machboost.cli.MachBoostClient", return_value=client),
+            patch(
+                "machboost.cli.start_chatgpt_gateway_relay",
+                return_value="http://127.0.0.1:11437",
+            ) as start_relay,
         ):
             code = cli.run_launch(args, output_stream=output)
 
         self.assertEqual(code, 0)
         manager.configure.assert_called_once()
+        start_relay.assert_called_once_with("http://127.0.0.1:11435", "secret")
+        self.assertEqual(manager.configure.call_args.args[0], "http://127.0.0.1:11437")
         self.assertEqual(manager.configure.call_args.kwargs["model"], "local/model")
         manager.restart_application.assert_not_called()
         self.assertIn("added to ChatGPT Desktop", output.getvalue())
