@@ -1536,8 +1536,9 @@ final class MachBoostTests: XCTestCase {
         let replaceResult = try await CodingWorkspace.execute(replace, workspaceRoot: root.path)
         XCTAssertTrue(try String(contentsOf: source, encoding: .utf8).contains("hello team"))
         XCTAssertEqual(replaceResult.changedPath, "Sources/App.swift")
-        XCTAssertTrue(replaceResult.changePatch?.contains("-hello") ?? false)
-        XCTAssertTrue(replaceResult.changePatch?.contains("+hello team") ?? false)
+        XCTAssertTrue(replaceResult.changePatch?.contains("-let greeting = \"hello\"") ?? false)
+        XCTAssertTrue(replaceResult.changePatch?.contains("+let greeting = \"hello team\"") ?? false)
+        XCTAssertTrue(replaceResult.changePatch?.contains("@@ -1 +1 @@") ?? false)
         XCTAssertEqual(
             CodingWorkspace.fileURL(
                 relativePath: "Sources/App.swift",
