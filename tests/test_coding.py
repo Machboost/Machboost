@@ -148,6 +148,48 @@ class CodingWorkspaceTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertIn("Invalid arguments", result.content)
 
+    def test_session_changes_exclude_untouched_files_and_keep_original(self):
+        workspace = CodingWorkspace(self.root, permission_mode="bypass")
+        (self.root / "unrelated.txt").write_text("existing work\n")
+        for old, new in (("hello", "hi"), ("hi", "welcome")):
+            result = workspace.execute(call("replace_in_file", {
+                "path": "src/app.py", "old_text": old, "new_text": new,
+            }))
+            self.assertEqual(result.status, "done")
+            self.assertIn("@@", result.change_patch)
+        diff = workspace.session_diff()
+        self.assertIn("-    return 'hello'", diff)
+        self.assertIn("+    return 'welcome'", diff)
+        self.assertNotIn("unrelated", diff)
+
+    def test_create_then_delete_has_no_net_session_changes(self):
+        workspace = CodingWorkspace(self.root, permission_mode="bypass")
+        workspace.execute(call("create_file", {"path": "new.txt", "content": "hello\n"}))
+        workspace.execute(call("delete_file", {"path": "new.txt"}))
+        self.assertEqual(workspace.session_diff(), "No file-tool changes in this session.")
+
+    def test_failed_command_is_an_error_with_output(self):
+        workspace = CodingWorkspace(self.root, permission_mode="bypass")
+        result = workspace.execute(call("run_command", {"command": "printf failed; exit 7"}))
+        self.assertEqual(result.status, "error")
+        self.assertIn("exit_code=7", result.content)
+        self.assertIn("failed", result.content)
+
+    def test_timeout_preserves_partial_output(self):
+        workspace = CodingWorkspace(self.root, permission_mode="bypass")
+        result = workspace.execute(call("run_command", {
+            "command": "printf started; sleep 10", "timeout_seconds": 1,
+        }))
+        self.assertEqual(result.status, "error")
+        self.assertIn("Timed out", result.content)
+        self.assertIn("started", result.content)
+
+    def test_empty_file_can_be_read(self):
+        (self.root / "empty.txt").touch()
+        result = CodingWorkspace(self.root).execute(call("read_file", {"path": "empty.txt"}))
+        self.assertEqual(result.status, "done")
+        self.assertEqual(result.content, "File is empty.")
+
     def test_system_prompt_names_real_workspace_and_permission_mode(self):
         prompt = coding_system_prompt(self.root, "plan")
 

@@ -204,8 +204,8 @@ class VisualAssetStore:
 
 def normalize_multimodal_messages(
     messages: Iterable[dict[str, Any]],
-) -> tuple[list[dict[str, str]], list[str]]:
-    normalized: list[dict[str, str]] = []
+) -> tuple[list[dict[str, Any]], list[str]]:
+    normalized: list[dict[str, Any]] = []
     images: list[str] = []
     for message in messages:
         role = str(message.get("role") or "user")
@@ -236,7 +236,12 @@ def normalize_multimodal_messages(
         if isinstance(raw_images, (str, bytes)):
             raw_images = (raw_images,)
         images.extend(str(image) for image in raw_images)
-        normalized.append({"role": role, "content": "\n".join(part for part in text_parts if part)})
+        row = {"role": role, "content": "\n".join(part for part in text_parts if part)}
+        # Tool history is required by native templates to continue after execution.
+        for key in ("tool_calls", "tool_call_id", "name", "tool_name"):
+            if key in message:
+                row[key] = message[key]
+        normalized.append(row)
     return normalized, images
 
 

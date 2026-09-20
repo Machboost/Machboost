@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import difflib
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import signal
 from typing import Any, Callable, Optional, Sequence
 
 
@@ -120,6 +122,7 @@ class ToolExecution:
     content: str
     status: str
     changed_path: Optional[str] = None
+    change_patch: Optional[str] = None
 
     def message(self) -> dict[str, Any]:
         return {
@@ -139,6 +142,7 @@ class CodingWorkspace:
             raise ValueError(f"unsupported permission mode: {permission_mode}")
         self.root = resolved
         self.permission_mode = permission_mode
+        self._originals: dict[str, Optional[str]] = {}
 
     def execute(
         self,
@@ -174,10 +178,38 @@ class CodingWorkspace:
             return ToolExecution(call_id, canonical, f"User declined: {description}", "denied")
 
         try:
+            before = None
+            relative = None
+            if canonical in {"replace_in_file", "create_file", "delete_file"}:
+                path = self._path(_required(arguments, "path"), writable=True)
+                relative = self._relative(path)
+                before = path.read_text(encoding="utf-8") if path.exists() else None
             content, changed_path = self._dispatch(canonical, arguments)
         except Exception as exc:
             return ToolExecution(call_id, canonical, f"{type(exc).__name__}: {exc}", "error")
-        return ToolExecution(call_id, canonical, content, "done", changed_path)
+        patch = None
+        if changed_path and relative is not None:
+            self._originals.setdefault(relative, before)
+            after = path.read_text(encoding="utf-8") if path.exists() else None
+            patch = self._diff(relative, before, after)
+        return ToolExecution(call_id, canonical, content, "done", changed_path, patch)
+
+    @staticmethod
+    def _diff(path: str, before: Optional[str], after: Optional[str]) -> str:
+        return "".join(difflib.unified_diff(
+            (before or "").splitlines(keepends=True),
+            (after or "").splitlines(keepends=True),
+            fromfile=f"a/{path}" if before is not None else "/dev/null",
+            tofile=f"b/{path}" if after is not None else "/dev/null",
+        ))
+
+    def session_diff(self) -> str:
+        patches = []
+        for relative, before in self._originals.items():
+            path = self._path(relative)
+            after = path.read_text(encoding="utf-8") if path.exists() else None
+            patches.append(self._diff(relative, before, after))
+        return _limited("\n".join(filter(None, patches)) or "No file-tool changes in this session.")
 
     def describe(self, name: str, arguments: dict[str, Any]) -> str:
         if name == "run_command":
@@ -256,6 +288,8 @@ class CodingWorkspace:
         if path.stat().st_size > MAX_FILE_BYTES:
             raise ValueError(f"file exceeds {MAX_FILE_BYTES} bytes")
         lines = path.read_text(encoding="utf-8").splitlines()
+        if not lines:
+            return "File is empty."
         start = max(1, int(arguments.get("start_line") or 1))
         end = min(len(lines), int(arguments.get("end_line") or start + 399))
         if end < start:
@@ -275,7 +309,7 @@ class CodingWorkspace:
             command.extend(("--glob", f"!{directory}/**"))
         if arguments.get("glob"):
             command.extend(("--glob", str(arguments["glob"])))
-        command.extend((query, str(base)))
+        command.extend(("--", query, str(base)))
         result = subprocess.run(command, text=True, capture_output=True, timeout=30)
         if result.returncode not in {0, 1}:
             raise RuntimeError((result.stderr or "search failed").strip())
@@ -336,20 +370,31 @@ class CodingWorkspace:
         command = _required(arguments, "command")
         timeout = max(1, min(300, int(arguments.get("timeout_seconds") or 120)))
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 ["/bin/zsh", "-lc", command],
                 cwd=self.root,
                 text=True,
-                capture_output=True,
-                timeout=timeout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
             )
-        except subprocess.TimeoutExpired as exc:
-            output = (exc.stdout or "") + (exc.stderr or "")
-            return _limited(f"Timed out after {timeout}s.\n{output}".strip())
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+                if isinstance(exc, KeyboardInterrupt):
+                    raise
+                raise RuntimeError(_limited(f"Timed out after {timeout}s.\n{stdout}\n{stderr}")) from exc
+        except OSError as exc:
+            raise RuntimeError(f"Unable to start command: {exc}") from exc
         output = "\n".join(
-            part for part in (result.stdout.strip(), result.stderr.strip()) if part
+            part for part in (stdout.strip(), stderr.strip()) if part
         )
-        return _limited(f"exit_code={result.returncode}\n{output}".strip())
+        result = _limited(f"exit_code={process.returncode}\n{output}".strip())
+        if process.returncode:
+            raise RuntimeError(result)
+        return result
 
     def git_diff(self) -> str:
         if not (self.root / ".git").exists():

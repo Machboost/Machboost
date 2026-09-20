@@ -451,6 +451,8 @@ enum CodingWorkspace {
             let path = try requiredString(arguments, "path")
             let oldText = try requiredString(arguments, "old_text", allowEmpty: false)
             let newText = try requiredString(arguments, "new_text", allowEmpty: true)
+            let file = try safeURL(root: root, relativePath: path, mustExist: true)
+            let before = try textFile(file, displayPath: path)
             content = try replaceInFile(
                 root: root,
                 path: path,
@@ -458,7 +460,7 @@ enum CodingWorkspace {
                 newText: newText
             )
             changedPath = path
-            changePatch = patch(path: path, before: oldText, after: newText, created: false)
+            changePatch = patch(path: path, before: before, after: before.replacingOccurrences(of: oldText, with: newText), created: false)
         case "create_file":
             let path = try requiredString(arguments, "path")
             let newContent = try requiredString(arguments, "content", allowEmpty: true)
@@ -508,6 +510,32 @@ enum CodingWorkspace {
         after: String,
         created: Bool
     ) -> String {
+        // Diff the complete file so review shows actual line numbers and surrounding code.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let original = directory.appendingPathComponent("before")
+            let updated = directory.appendingPathComponent("after")
+            let output = directory.appendingPathComponent("diff")
+            try before.write(to: original, atomically: true, encoding: .utf8)
+            try after.write(to: updated, atomically: true, encoding: .utf8)
+            FileManager.default.createFile(atPath: output.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: output)
+            defer { try? handle.close() }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/diff")
+            process.arguments = ["-u", "--label", created ? "/dev/null" : "a/\(path)", "--label", "b/\(path)", original.path, updated.path]
+            process.standardOutput = handle
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus <= 1 {
+                return String(try String(contentsOf: output, encoding: .utf8).prefix(24_000))
+            }
+        } catch {
+            // Preserve an edit preview if the system diff utility cannot run.
+        }
         var lines = [
             "--- \(created ? "/dev/null" : "a/\(path)")",
             "+++ b/\(path)",

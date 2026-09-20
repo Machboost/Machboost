@@ -377,6 +377,9 @@ class MLXVLMAccelerator:
         formatted = []
         for index, message in enumerate(messages):
             role = str(message.get("role") or "user")
+            if role == "tool" or "tool_calls" in message:
+                formatted.append(dict(message))
+                continue
             formatted.append(
                 prompt_utils.get_message_json(
                     model_type,

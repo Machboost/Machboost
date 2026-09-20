@@ -81,6 +81,7 @@ Ctrl-C stops the current reply. Ctrl-D unloads the model and exits."""
 CODING_HELP = """Coding commands:
   /mode MODE        use manual, accept-edits, plan, or bypass permissions
   /diff             show changes in the selected workspace
+  /changes          show file-tool edits made during this session
   /workspace        show the selected workspace
   /tools            list the coding tools available to the model"""
 
@@ -187,6 +188,14 @@ class ChatConsole:
         status = self.styled(f"[{execution.status}]", colors.get(execution.status, self.MUTED), self.BOLD)
         detail = execution.content.splitlines()[0] if execution.content else ""
         print(f"{status} {execution.name}  {detail[:120]}", file=self.stream, flush=True)
+        lines = (execution.change_patch or execution.content).splitlines()
+        if not execution.change_patch:
+            lines = lines[1:]
+        for line in lines[:16]:
+            style = self.GREEN if line.startswith("+") else "\033[38;5;203m" if line.startswith("-") else self.MUTED
+            print(self.styled("  " + line, style), file=self.stream)
+        if len(lines) > 16:
+            self.notice(f"  ... {len(lines) - 16} more lines; /changes shows file-tool edits")
 
 
 def _middle_truncate(value: str, limit: int) -> str:
@@ -2068,6 +2077,9 @@ def run_resident_chat(
         if command == "/diff" and coding is not None:
             print(coding.git_diff(), file=output_stream)
             continue
+        if command == "/changes" and coding is not None:
+            print(coding.session_diff(), file=output_stream)
+            continue
         if command == "/workspace" and coding is not None:
             print(str(coding.root), file=output_stream)
             continue
@@ -2306,6 +2318,9 @@ def run_resident_chat(
                 {"role": "assistant", "content": response, "tool_calls": tool_calls}
             )
             for tool_call in tool_calls:
+                if console.pretty:
+                    function = tool_call.get("function") or {}
+                    console.tool(str(function.get("name") or "tool"), "running")
                 execution = coding.execute(
                     tool_call,
                     confirm=lambda description: confirm_coding_action(
