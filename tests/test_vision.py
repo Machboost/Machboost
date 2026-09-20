@@ -18,6 +18,17 @@ PNG_B = b"\x89PNG\r\n\x1a\nsecond-image-with-a-different-size"
 
 
 class VisionCacheTests(unittest.TestCase):
+    def test_multimodal_normalization_preserves_tool_history(self):
+        calls = [{"id": "call_1", "function": {"name": "read_file", "arguments": {"path": "app.py"}}}]
+        messages, images = normalize_multimodal_messages([
+            {"role": "assistant", "content": "", "tool_calls": calls},
+            {"role": "tool", "content": "return 42", "tool_call_id": "call_1", "name": "read_file"},
+        ])
+        self.assertEqual(messages[0]["tool_calls"], calls)
+        self.assertEqual(messages[1]["tool_call_id"], "call_1")
+        self.assertEqual(messages[1]["name"], "read_file")
+        self.assertEqual(images, [])
+
     def test_same_content_at_different_paths_reuses_features(self):
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.png"
