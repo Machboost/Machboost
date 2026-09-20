@@ -979,17 +979,14 @@ def _run_chatgpt_launch(
                 raise RuntimeError(
                     "the selected MachBoost server has no downloaded models; download or load one first"
                 )
-            app_endpoint = endpoint
-            if not is_local:
-                app_endpoint = start_chatgpt_gateway_relay(endpoint, token)
+            app_endpoint = start_chatgpt_gateway_relay(endpoint, token)
             status = manager.configure(
                 app_endpoint,
                 rows,
                 model=rows[0]["name"],
             )
-            if not is_local:
-                status["upstream"] = endpoint
-                status["relayed"] = True
+            status["upstream"] = endpoint
+            status["relayed"] = True
             action = "connected"
             restarted = False if args.config_only else _restart_desktop_integration(manager, args)
     except (MachBoostAPIError, OSError, RuntimeError, ValueError) as exc:
