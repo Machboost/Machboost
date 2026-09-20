@@ -255,7 +255,7 @@ reasoning and the answer. An explicit small budget can end during reasoning.
 This does not make context windows or memory unlimited. Raw completion models
 that do not emit EOS may need Ctrl-C or an explicit cap.
 
-Run a workspace-bounded coding session from the terminal:
+Run a coding session from the terminal:
 
 ```sh
 cd /path/to/repository
@@ -270,9 +270,13 @@ The coding loop can list and read files, search with ripgrep, make exact block
 replacements, create or delete files, run shell commands, and show the Git diff.
 `manual` asks before edits and commands, `accept-edits` approves file edits but
 asks before commands, `plan` blocks mutations, and `bypass` allows workspace
-actions without prompts. Paths cannot escape the selected workspace and `.git`
-metadata cannot be edited. Use `/mode`, `/diff`, `/workspace`, and `/tools` during
-the session. This is an early local coding harness, not a claim of feature parity
+actions without prompts. Built-in file tools cannot escape the selected workspace
+or edit `.git` metadata. Shell commands run with your user permissions, not in an
+OS sandbox; review commands before approving them. Tool results include failure
+status and output, and file edits show a diff preview. Use `/changes` for changes
+made by this session's file tools, or `/diff` for the whole Git working tree,
+including pre-existing and shell-command edits. `/mode`, `/workspace`, and `/tools`
+are also available. This is an early local coding harness, not a claim of feature parity
 with mature hosted coding agents.
 
 Connect a local MCP server or save reusable instructions from the CLI:
