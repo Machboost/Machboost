@@ -2841,6 +2841,24 @@ More generic harness instructions.
         self.assertIn("content_block_delta", event_types)
         self.assertEqual(event_types[-1], "message_stop")
 
+    def test_anthropic_whitespace_thinking_does_not_follow_answer(self):
+        from machboost.server import GenerationResult
+
+        def chat(*args, **kwargs):
+            kwargs["on_admitted"]()
+            kwargs["emit"]("BENCH_OK")
+            kwargs["emit_thinking"]("\n")
+            return GenerationResult("mlx-community/example", "mlx", "BENCH_OK", {}, 0, 0, thinking="\n")
+
+        with patch("machboost.server.RuntimeManager.chat", side_effect=chat):
+            _, _, body = self.request("/v1/messages", {
+                "model": "mlx-community/example", "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 32, "stream": True,
+            })
+        events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+        blocks = [e["content_block"]["type"] for e in events if e["type"] == "content_block_start"]
+        self.assertEqual(blocks, ["text"])
+
     def test_sse_protocols_flush_the_final_tokenizer_fragment(self):
         anthropic_payload = {
             "model": "mlx-community/tail-dropping",
