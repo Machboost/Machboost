@@ -3236,6 +3236,14 @@ def run_ps(args: argparse.Namespace, *, output_stream=None, error_stream=None) -
 def run_server_action(args: argparse.Namespace, action: str, *, output_stream=None, error_stream=None) -> int:
     output_stream = output_stream or sys.stdout
     error_stream = error_stream or sys.stderr
+    if action == "start":
+        try:
+            client, started = ensure_server(args.endpoint, timeout=args.timeout, headless=args.headless)
+        except MachBoostAPIError as exc:
+            print(f"machboost start error: {exc}", file=error_stream)
+            return 2
+        print(f"MachBoost server {'started' if started else 'already running'} at {client.endpoint}", file=output_stream)
+        return 0
     client = MachBoostClient(args.endpoint, timeout=args.timeout)
     if not client.is_healthy():
         print("MachBoost server is not running.", file=error_stream)
@@ -3531,6 +3539,9 @@ def build_parser() -> argparse.ArgumentParser:
     stop.add_argument("model", nargs="?", help="Model to unload. Omit to unload every model.")
     add_server_connection_arguments(stop)
 
+    start = subcommands.add_parser("start", help="Start or reuse the local resident server.")
+    add_server_connection_arguments(start)
+    start.add_argument("--headless", action="store_true", help="Start without opening the Mac app (automatic over SSH).")
     shutdown = subcommands.add_parser("shutdown", help="Stop the resident server and unload every model.")
     add_server_connection_arguments(shutdown)
 
@@ -4000,6 +4011,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return run_server_action(args, "stop")
     if args.command == "shutdown":
         return run_server_action(args, "shutdown")
+    if args.command == "start":
+        return run_server_action(args, "start")
     if args.command == "ollama" and args.ollama_command == "run":
         return run_ollama_chat(args)
     parser.print_help()
