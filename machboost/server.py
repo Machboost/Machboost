@@ -2183,6 +2183,9 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             return
         if not self.authorize():
             return
+        if path == "/v1/responses" and self.headers.get("Upgrade", "").lower() == "websocket":
+            self.send_json({"error": "Use HTTP POST with SSE streaming"}, status=426)
+            return
         if path == "/":
             self.send_json(status)
             return
@@ -5058,10 +5061,14 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         return False
 
     def read_json(self) -> dict[str, Any]:
+        from .http_body import MAX_BODY_BYTES, decode_body
+
         length = int(self.headers.get("Content-Length", "0"))
+        if length < 0 or length > MAX_BODY_BYTES:
+            raise ValueError("request body exceeds permitted size")
         if length <= 0:
             return {}
-        raw = self.rfile.read(length)
+        raw = decode_body(self.rfile.read(length), self.headers.get("Content-Encoding", ""))
         value = json.loads(raw.decode("utf-8"))
         if not isinstance(value, dict):
             raise ValueError("request body must be a JSON object")
