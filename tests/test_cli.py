@@ -21,6 +21,25 @@ class CLITests(unittest.TestCase):
                 self.assertEqual(main(["start", "--headless"]), 0)
         self.assertTrue(start.call_args.kwargs["headless"])
 
+    def test_run_vlm_passes_stable_cli_cache_key(self):
+        accelerator = Mock()
+        accelerator.supports_vision = True
+        accelerator.generate_chat.return_value = ("ok", SimpleNamespace(
+            generated_tokens=1, generation_tokens_per_second=1.0,
+            prompt_tokens_per_second=1.0, backend="mlx-vlm",
+            time_to_first_token_seconds=0.01, visual_cache_hit=False,
+            visual_cache_miss=False,
+        ))
+        with patch.object(cli, "load_native_accelerator", return_value=accelerator), patch.object(
+            cli, "prepare_visual_inputs", return_value=([], False)
+        ):
+            code = cli.run_native_chat(cli.build_parser().parse_args([
+                "run", "example", "--backend", "mlx"
+            ]), input_func=Mock(side_effect=["hi", "/exit"]),
+                output_stream=io.StringIO(), error_stream=io.StringIO())
+        self.assertEqual(code, 0)
+        self.assertEqual(accelerator.generate_chat.call_args.kwargs["cache_key"], "cli:example")
+
     def test_mcp_command_keeps_top_level_dispatch_and_stdio_executable(self):
         args = cli.build_parser().parse_args(
             [
