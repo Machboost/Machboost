@@ -2260,6 +2260,37 @@ class HTTPServerTests(unittest.TestCase):
         self.assertEqual(json.loads(calls[0]["function"]["arguments"])["path"], "a.py")
         self.assertEqual(len(self.loaded[0][1].chat_calls[0][3]), 2)
 
+    def test_responses_compaction_round_trip_and_stream(self):
+        items = [{"role": "user", "content": "Remember test " + str(i)} for i in range(9)]
+        payload = {"model": "mlx-community/example", "input": items}
+        _, _, body = self.request("/v1/responses/compact", payload)
+        compact = json.loads(body)
+        self.assertEqual(compact["object"], "response.compaction")
+        self.assertEqual(compact["output"][0]["type"], "compaction")
+        _, _, reply = self.request("/v1/responses", {
+            "model": payload["model"], "input": compact["output"] + [{"role": "user", "content": "Continue"}]})
+        self.assertEqual(json.loads(reply)["object"], "response")
+        _, _, streamed = self.request("/v1/responses", {
+            **payload, "stream": True, "input": items + [{"type": "compaction_trigger"}]})
+        events = [json.loads(line[6:]) for line in streamed.splitlines() if line.startswith("data: {")]
+        self.assertEqual(events[-1]["type"], "response.completed")
+        self.assertEqual(events[-1]["response"]["output"][0]["type"], "compaction")
+        self.assertEqual(sum(x["type"] == "response.output_item.done" for x in events), 1)
+
+    def test_compressed_compaction_and_failed_summary(self):
+        import zstandard
+        payload = {"model": "mlx-community/example", "input": [{"role": "user", "content": str(i)} for i in range(8)]}
+        request = Request(self.base_url + "/v1/responses/compact",
+                          data=zstandard.ZstdCompressor().compress(json.dumps(payload).encode()),
+                          headers={"Content-Type": "application/json", "Content-Encoding": "zstd"})
+        with urlopen(request, timeout=3) as response:
+            self.assertEqual(json.load(response)["object"], "response.compaction")
+        with patch("machboost.server.RuntimeManager.chat", side_effect=ValueError("summary failed")):
+            with self.assertRaises(HTTPError):
+                self.request("/v1/responses/compact", payload)
+        with self.assertRaises(HTTPError):
+            self.request("/v1/responses", {**payload, "input": [{"type": "compaction_trigger"}, *payload["input"]], "stream": True})
+
     def test_responses_endpoint_returns_coding_agent_function_calls(self):
         _, _, body = self.request(
             "/v1/responses",
