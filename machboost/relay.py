@@ -102,6 +102,8 @@ def start_gateway_relay(
     log_path = log_dir / "claude-relay.log"
     command = [
         sys.executable,
+        "-I",
+        "-B",
         "-m",
         "machboost.relay",
         "serve",
