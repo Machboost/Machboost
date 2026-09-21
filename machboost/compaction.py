@@ -26,7 +26,12 @@ def expand_items(items: Any) -> list[dict[str, Any]]:
             if any(x.get("type") in {"compaction", "compaction_trigger"} for x in retained):
                 raise ValueError("nested compaction state is not supported")
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
-            raise ValueError("invalid or foreign MachBoost compaction envelope") from exc
+            raise ValueError(
+                "Cannot restore this chat's compacted history: it is encrypted by another "
+                "provider, unsupported, or damaged. Start a new chat with MachBoost selected "
+                "and paste a plain-text summary, or resume this chat with its original provider. "
+                "No history has been discarded."
+            ) from exc
         expanded.append({"type": "message", "role": "assistant",
                          "content": "Conversation summary (historical context):\n" + summary})
         expanded.extend(retained)
