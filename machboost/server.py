@@ -4158,6 +4158,10 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             nonlocal streamed_thinking, thinking_block_text
             if not text:
                 return
+            # Track whitespace without opening a phantom thinking block after an answer.
+            if thinking_index is None and not text.strip():
+                streamed_thinking += text
+                return
             if text_index is not None:
                 event("content_block_stop", index=text_index)
                 text_index = None
