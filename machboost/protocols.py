@@ -49,6 +49,7 @@ _CORE_AGENT_TOOLS = {
 
 
 def responses_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    from .compaction import expand_items
     messages: list[dict[str, Any]] = []
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
@@ -60,6 +61,7 @@ def responses_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
         return messages
     if not isinstance(raw_input, list):
         raise ValueError("Responses input must be text or an input item list")
+    raw_input = expand_items(raw_input)
 
     for item in raw_input:
         if not isinstance(item, dict):
