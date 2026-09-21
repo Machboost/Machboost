@@ -15,6 +15,12 @@ from machboost.connections import ConnectionProfile
 
 
 class CLITests(unittest.TestCase):
+    def test_start_headless_dispatch(self):
+        with patch("machboost.cli.ensure_server", return_value=(SimpleNamespace(endpoint="http://127.0.0.1:11435"), True)) as start:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["start", "--headless"]), 0)
+        self.assertTrue(start.call_args.kwargs["headless"])
+
     def test_mcp_command_keeps_top_level_dispatch_and_stdio_executable(self):
         args = cli.build_parser().parse_args(
             [
@@ -1132,7 +1138,7 @@ class CLITests(unittest.TestCase):
         output = io.StringIO()
         client = FakeResidentClient()
 
-        with patch.object(cli, "MachBoostClient", return_value=client):
+        with patch.object(cli, "_automatic_host_pool", return_value=None), patch.object(cli, "MachBoostClient", return_value=client):
             code = cli.run_ps(
                 cli.build_parser().parse_args(["ps"]),
                 output_stream=output,
