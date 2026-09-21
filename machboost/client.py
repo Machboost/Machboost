@@ -1038,6 +1038,7 @@ def ensure_server(
     *,
     timeout: float = 30.0,
     log_path: Optional[Path] = None,
+    headless: bool = False,
 ) -> tuple[MachBoostClient, bool]:
     from . import __version__
 
@@ -1074,7 +1075,8 @@ def ensure_server(
         raise MachBoostAPIError(f"refusing to auto-start a server for non-local endpoint {client.endpoint!r}")
 
     app = _installed_machboost_app(__version__)
-    if app is not None and _wake_machboost_app(
+    use_gui = not headless and not (os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"))
+    if app is not None and use_gui and port == DEFAULT_PORT and _wake_machboost_app(
         app,
         client,
         version=__version__,
@@ -1086,8 +1088,11 @@ def ensure_server(
     cache_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_path or cache_dir / "server.log"
     pid_path = cache_dir / "server.pid"
+    bundled_python = app / "Contents/Resources/runtime/python/bin/python3" if app else None
+    executable = str(bundled_python) if bundled_python and bundled_python.is_file() else sys.executable
     command = [
-        sys.executable,
+        executable,
+        *(["-I", "-B"] if bundled_python and bundled_python.is_file() else []),
         "-m",
         "machboost",
         "serve",
