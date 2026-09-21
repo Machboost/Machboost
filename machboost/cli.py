@@ -1392,6 +1392,9 @@ def run_native_chat(
                     vision_token_layer=args.vision_token_layer,
                     vision_token_bucket=args.vision_token_bucket,
                     vision_calibration=load_vision_calibration(args.vision_calibration),
+                    # Keep the resident MLX-VLM KV state attached to this CLI
+                    # session so follow-up turns do not cold-prefill again.
+                    cache_key=f"cli:{args.model}",
                 )
             response, stats = accelerator.generate_chat(messages, **kwargs)
         except KeyboardInterrupt:
