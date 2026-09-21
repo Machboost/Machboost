@@ -32,6 +32,13 @@ class CompactionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 triggered({"input": items, "stream": stream})
 
+    def test_opaque_provider_history_reports_recovery_without_skipping(self):
+        items = [{"type": "compaction", "encrypted_content": "opaque-provider-state"},
+                 {"role": "user", "content": "Continue"}]
+        with self.assertRaisesRegex(ValueError, "Start a new chat with MachBoost selected"):
+            expand_items(items)
+        self.assertEqual(len(items), 2)
+
     def test_images_and_pending_tools_retained(self):
         image = {"role": "user", "content": [{"type": "input_image", "image_url": "data:image/png;base64,AA=="}]}
         pending = {"type": "function_call", "call_id": "pending", "name": "test", "arguments": "{}"}
