@@ -1,0 +1,216 @@
+{
+  "schema": "machboost.vlm_latency_audit.v1",
+  "model": "mlx-community/Muse-Glimmer-30B-4bit",
+  "load_seconds": 5.70685049999156,
+  "cache": "memory",
+  "context_lines": 128,
+  "max_tokens": 128,
+  "reasoning_enabled": true,
+  "reasoning_strength": "low",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "versions": {
+    "mlx": "0.32.0",
+    "mlx-vlm": "0.6.13",
+    "mlx-lm": "0.31.3"
+  },
+  "measurement": "Same loaded weights, template, reasoning settings, and greedy sampling; adapter only.",
+  "notes": [
+    "Native baseline has no cross-request prompt cache; MachBoost uses its normal prefix cache.",
+    "Cold rows compare wrapper overhead. Follow-ups measure cache reuse, not faster cold inference.",
+    "Follow-up history is fixed to keep both inputs identical regardless of first-turn output.",
+    "Chunked/cached prefill can change greedy tokens through floating-point differences; equality is measured, not assumed.",
+    "Warmup/load is excluded; disk cache is temporary and unique to this invocation."
+  ],
+  "rows": [
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 18.32680562499445,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 17.0529476536734,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 12.161484917014604,
+      "first_output_seconds": 12.161484917014604,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 19.516019959002733,
+      "prompt_tokens": 1477,
+      "generated_tokens": 127,
+      "generation_tokens_per_second": 17.307061146410277,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "e160c7939347aea80d860829283c2949ed73c5059bdce57443ce78176953e441",
+      "first_native_chunk_seconds": 12.401279125013389,
+      "first_output_seconds": 12.401279125013389,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: validate input fields before returning structured records.\n\nA useful validation check is e.g., ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is returned.<|eot|>"
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 17.90759524999885,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 16.874173525935348,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 11.677662417001557,
+      "first_output_seconds": 12.386360207980033,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 7.9780847919755615,
+      "prompt_tokens": 1477,
+      "generated_tokens": 128,
+      "generation_tokens_per_second": 16.817521162900455,
+      "cached_prompt_tokens": 1451,
+      "token_sha256": "eda816044aebdc45799aca9d4d943005b478ebfbebcfa95e3d7d8a717de586c5",
+      "first_native_chunk_seconds": 0.5951630829949863,
+      "first_output_seconds": 1.1453671249910258,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: they validate input fields before returning structured records.\n\nA useful validation check in that context is e.g. ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is"
+    },
+    {
+      "run": 1,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 17.650393334013643,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 17.32106593998682,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 11.590136959013762,
+      "first_output_seconds": 12.28892929200083,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 8.087829708005302,
+      "prompt_tokens": 1477,
+      "generated_tokens": 128,
+      "generation_tokens_per_second": 16.56461972936268,
+      "cached_prompt_tokens": 1451,
+      "token_sha256": "eda816044aebdc45799aca9d4d943005b478ebfbebcfa95e3d7d8a717de586c5",
+      "first_native_chunk_seconds": 0.5820817500061821,
+      "first_output_seconds": 1.1048920419998467,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: they validate input fields before returning structured records.\n\nA useful validation check in that context is e.g. ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is"
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 18.462818041996798,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 17.25626199560463,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 12.375356625008862,
+      "first_output_seconds": 12.375356625008862,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 19.993362459004857,
+      "prompt_tokens": 1477,
+      "generated_tokens": 127,
+      "generation_tokens_per_second": 16.824967921175613,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "e160c7939347aea80d860829283c2949ed73c5059bdce57443ce78176953e441",
+      "first_native_chunk_seconds": 12.689368542021839,
+      "first_output_seconds": 12.689368542021839,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: validate input fields before returning structured records.\n\nA useful validation check is e.g., ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is returned.<|eot|>"
+    },
+    {
+      "run": 2,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 18.412496791017475,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 16.891518324602224,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 12.189847708010348,
+      "first_output_seconds": 12.189847708010348,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 20.100952792010503,
+      "prompt_tokens": 1477,
+      "generated_tokens": 127,
+      "generation_tokens_per_second": 16.370960199640958,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "e160c7939347aea80d860829283c2949ed73c5059bdce57443ce78176953e441",
+      "first_native_chunk_seconds": 12.575710708013503,
+      "first_output_seconds": 12.575710708013503,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: validate input fields before returning structured records.\n\nA useful validation check is e.g., ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is returned.<|eot|>"
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 17.652058540988946,
+      "prompt_tokens": 1450,
+      "generated_tokens": 109,
+      "generation_tokens_per_second": 17.384128340466077,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "d8bc6a958ef466ca615e3f1f06823dae13d38b6d5d7a1631688037722ba22aa2",
+      "first_native_chunk_seconds": 11.609264082973823,
+      "first_output_seconds": 12.307055999990553,
+      "generated_text": " to=self<|message|>Module 0 validates input fields before returning structured records.\n...\nWhat do these modules do?\n\nWe need answer concisely using supplied notes. All modules validate input fields before returning structured records. So they all do same thing? Possibly they are identical? Maybe it's a trick: they all validate input fields before returning\n<|eom|><|start|>assistant to=user<|message|>All 128 modules listed do the same thing:\n\n* **Validate input fields before returning structured records**\n\nModule 0 through Module 127 each validate input fields before returning structured records.<|eot|>"
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 7.7800044589967,
+      "prompt_tokens": 1477,
+      "generated_tokens": 128,
+      "generation_tokens_per_second": 17.250058845642243,
+      "cached_prompt_tokens": 1451,
+      "token_sha256": "eda816044aebdc45799aca9d4d943005b478ebfbebcfa95e3d7d8a717de586c5",
+      "first_native_chunk_seconds": 0.580443208978977,
+      "first_output_seconds": 1.1058897499751765,
+      "generated_text": " to=self<|message|>Give one example of a useful validation check.\n\nWe need answer concisely using supplied notes. The notes say modules validate input fields before returning structured records. So example: check that required fields are present / non-empty, type check, format, range, etc.\n\nProbably give example: ensure email field matches email regex\n<|eom|><|start|>assistant to=user<|message|>All 128 modules do the same thing: they validate input fields before returning structured records.\n\nA useful validation check in that context is e.g. ensuring a required field is present and non-empty, or that a field like `email` matches a valid email format before the record is"
+    },
+    {
+      "run": 3,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    }
+  ]
+}
