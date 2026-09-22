@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import platform
 import statistics
 import time
+import uuid
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .adapters.ollama import OllamaHTTPAdapter
@@ -43,11 +44,16 @@ def benchmark_chat_latency(
     if draft_num_predict is not None and draft_num_predict < 0:
         raise ValueError("draft_num_predict cannot be negative")
 
-    nonces = [f"machboost-latency-{index + 1}" for index in range(warmups + runs)]
+    benchmark_id = uuid.uuid4().hex
+    nonces = [
+        f"machboost-latency-{benchmark_id}-{index + 1}"
+        for index in range(warmups + runs)
+    ]
     artifact: dict[str, Any] = {
         "schema_version": LATENCY_SCHEMA,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "config": {
+            "benchmark_id": benchmark_id,
             "model": model,
             "ollama_model": ollama_model or model,
             "prompt": prompt,
@@ -91,6 +97,8 @@ def benchmark_chat_latency(
                 else "Unique system-message nonces prevent exact repeated-prompt cache hits."
             ),
             "Two-engine runs alternate which engine executes first in each round.",
+            "Nonces do not disable shared-prefix caching. Inspect cached_prompt_tokens; these are not guaranteed cold-prefill measurements.",
+            "client_ttft_seconds retains its v1 meaning: first answer text. client_first_output_seconds also counts reasoning and tool calls.",
             "Without draft context, MachBoost delegates text generation to the native backend.",
         ],
     }
@@ -436,6 +444,7 @@ def measure_machboost_chat(
 ) -> dict[str, Any]:
     started = clock()
     first_text_at = None
+    first_output_at = None
     output = []
     final: Mapping[str, Any] = {}
     for item in client.chat(
@@ -445,10 +454,16 @@ def measure_machboost_chat(
         keep_alive=keep_alive,
         stream=True,
     ):
-        content = str((item.get("message") or {}).get("content") or "")
+        message = item.get("message") or {}
+        content = str(message.get("content") or "")
+        emitted_at = None
+        if content or message.get("thinking") or message.get("tool_calls"):
+            emitted_at = clock()
+            if first_output_at is None:
+                first_output_at = emitted_at
         if content:
             if first_text_at is None:
-                first_text_at = clock()
+                first_text_at = emitted_at
             output.append(content)
         if item.get("done"):
             final = item
@@ -460,6 +475,7 @@ def measure_machboost_chat(
         output="".join(output),
         wall_seconds=max(0.0, finished - started),
         client_ttft_seconds=None if first_text_at is None else first_text_at - started,
+        client_first_output_seconds=None if first_output_at is None else first_output_at - started,
     )
 
 
@@ -475,6 +491,7 @@ def measure_ollama_chat(
 ) -> dict[str, Any]:
     started = clock()
     first_text_at = None
+    first_output_at = None
     output = []
     final: Mapping[str, Any] = {}
     options: dict[str, Any] = {"num_predict": max_tokens, "temperature": 0.0}
@@ -491,9 +508,14 @@ def measure_ollama_chat(
         think=False,
         **control_options,
     ):
+        emitted_at = None
+        if chunk.content or getattr(chunk, "thinking", "") or getattr(chunk, "tool_calls", ()):
+            emitted_at = clock()
+            if first_output_at is None:
+                first_output_at = emitted_at
         if chunk.content:
             if first_text_at is None:
-                first_text_at = clock()
+                first_text_at = emitted_at
             output.append(chunk.content)
         if chunk.done:
             final = chunk.raw
@@ -505,6 +527,7 @@ def measure_ollama_chat(
         output="".join(output),
         wall_seconds=max(0.0, finished - started),
         client_ttft_seconds=None if first_text_at is None else first_text_at - started,
+        client_first_output_seconds=None if first_output_at is None else first_output_at - started,
     )
 
 
@@ -523,8 +546,11 @@ def latency_row(
     output: str,
     wall_seconds: float,
     client_ttft_seconds: Optional[float],
+    client_first_output_seconds: Optional[float] = None,
 ) -> dict[str, Any]:
     machboost = final.get("machboost") or {}
+    stats = machboost.get("stats") or {}
+    scheduler = machboost.get("scheduler") or {}
     eval_count = int(final.get("eval_count") or 0)
     eval_seconds = float(final.get("eval_duration") or 0) / 1_000_000_000
     prompt_count = int(final.get("prompt_eval_count") or 0)
@@ -534,6 +560,9 @@ def latency_row(
         "run": run,
         "wall_seconds": wall_seconds,
         "client_ttft_seconds": client_ttft_seconds,
+        "client_first_output_seconds": client_first_output_seconds,
+        "cached_prompt_tokens": stats.get("prompt_cache_prefix_tokens", stats.get("cached_prompt_tokens")),
+        "queue_seconds": scheduler.get("queue_wait_seconds"),
         "backend_ttft_seconds": machboost.get("time_to_first_token_seconds"),
         "total_seconds": float(final.get("total_duration") or 0) / 1_000_000_000,
         "load_seconds": float(final.get("load_duration") or 0) / 1_000_000_000,
@@ -553,10 +582,16 @@ def summarize_latency(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         for row in rows
         if row.get("client_ttft_seconds") is not None
     ]
+    first_outputs = [
+        float(row["client_first_output_seconds"])
+        for row in rows
+        if row.get("client_first_output_seconds") is not None
+    ]
     return {
         "runs": len(rows),
         "median_wall_seconds": median(float(row["wall_seconds"]) for row in rows),
         "median_client_ttft_seconds": median(ttfts),
+        "median_client_first_output_seconds": median(first_outputs) if first_outputs else None,
         "median_tokens_per_second": median(
             float(row["tokens_per_second"]) for row in rows
         ),
