@@ -1,0 +1,89 @@
+{
+  "schema": "machboost.stream_delivery.v1",
+  "model": "mlx-community/Muse-Glimmer-30B-4bit",
+  "runs": 3,
+  "clients": 1,
+  "max_tokens": 128,
+  "context_lines": 0,
+  "measurement": "HTTP client, not Claude Desktop UI",
+  "rows": [
+    {
+      "run": 1,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "native",
+      "first_output_s": 6.005155582999578,
+      "first_text_s": 7.494385583006078,
+      "text_characters": 460,
+      "headers_s": 0.012102332984795794,
+      "load_s": 0.0,
+      "queue_s": 0.0,
+      "prompt_tokens": 411,
+      "cached_tokens": 0,
+      "generated_tokens": 121,
+      "wall_s": 12.438880375004373
+    },
+    {
+      "run": 1,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 5.789892665983643,
+      "first_text_s": 7.345061625004746,
+      "text_characters": 460,
+      "headers_s": 0.016874166001798585,
+      "generated_tokens": 121,
+      "wall_s": 12.47701624999172
+    },
+    {
+      "run": 2,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 5.86923370801378,
+      "first_text_s": 7.41460320801707,
+      "text_characters": 460,
+      "headers_s": 0.0276621250086464,
+      "generated_tokens": 121,
+      "wall_s": 12.433444458001759
+    },
+    {
+      "run": 2,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "native",
+      "first_output_s": 2.1012727500055917,
+      "first_text_s": 3.623430833016755,
+      "text_characters": 460,
+      "headers_s": 0.0008410419977735728,
+      "load_s": 0.0,
+      "queue_s": 0.0,
+      "prompt_tokens": 411,
+      "cached_tokens": 389,
+      "generated_tokens": 121,
+      "wall_s": 8.673417667014292
+    },
+    {
+      "run": 3,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "native",
+      "first_output_s": 2.1107740000006743,
+      "first_text_s": 3.2875914169999305,
+      "text_characters": 461,
+      "headers_s": 0.0009615840099286288,
+      "load_s": 0.0,
+      "queue_s": 0.0,
+      "prompt_tokens": 411,
+      "cached_tokens": 389,
+      "generated_tokens": 117,
+      "wall_s": 8.410578834009357
+    },
+    {
+      "run": 3,
+      "model": "mlx-community/Muse-Glimmer-30B-4bit",
+      "protocol": "anthropic",
+      "first_output_s": 5.824961250007618,
+      "first_text_s": 7.014638125023339,
+      "text_characters": 540,
+      "headers_s": 0.015949917025864124,
+      "generated_tokens": 128,
+      "wall_s": 13.020259167009499
+    }
+  ]
+}
