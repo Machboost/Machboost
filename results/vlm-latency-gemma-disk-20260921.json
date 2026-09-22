@@ -1,0 +1,214 @@
+{
+  "schema": "machboost.vlm_latency_audit.v1",
+  "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+  "load_seconds": 4.570792125014123,
+  "cache": "disk",
+  "context_lines": 400,
+  "max_tokens": 32,
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "versions": {
+    "mlx": "0.32.0",
+    "mlx-vlm": "0.6.13",
+    "mlx-lm": "0.31.3"
+  },
+  "measurement": "Same loaded weights, template, reasoning settings, and greedy sampling; adapter only.",
+  "notes": [
+    "Native baseline has no cross-request prompt cache; MachBoost uses its normal prefix cache.",
+    "Cold rows compare wrapper overhead. Follow-ups measure cache reuse, not faster cold inference.",
+    "Follow-up history is fixed to keep both inputs identical regardless of first-turn output.",
+    "Chunked/cached prefill can change greedy tokens through floating-point differences; equality is measured, not assumed.",
+    "Warmup/load is excluded; disk cache is temporary and unique to this invocation."
+  ],
+  "rows": [
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.493710417009424,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 71.15828363991697,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.2382695840206,
+      "first_output_seconds": 7.2382695840206,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.541248500026995,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 68.53936413756438,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.218512125022244,
+      "first_output_seconds": 7.218512125022244,
+      "generated_text": "One useful validation check is ensuring an **email address** contains an \"@\" symbol and a valid domain name.<turn|>"
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.6332163749902975,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 59.77942180015306,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.341595790989231,
+      "first_output_seconds": 7.3421234999841545,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.7069403750065248,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 64.4396772046527,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.22968091699294746,
+      "first_output_seconds": 0.22992412498570047,
+      "generated_text": "One useful validation check is ensuring that an **email address** contains both an \"@\" symbol and a valid domain extension (e.g., \".com\").<turn|>"
+    },
+    {
+      "run": 1,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.676467250013957,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 64.41885349644863,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.4025448330212384,
+      "first_output_seconds": 7.402781583019532,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.6858173329965211,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 67.6179015004782,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.22541404099320062,
+      "first_output_seconds": 0.2256780829920899,
+      "generated_text": "One useful validation check is ensuring that an **email address** contains both an \"@\" symbol and a valid domain extension (e.g., \".com\").<turn|>"
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.639517250005156,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 56.9514275509964,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.347527458012337,
+      "first_output_seconds": 7.347527458012337,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.557121249992633,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 69.54498923788685,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.238292458001524,
+      "first_output_seconds": 7.238292458001524,
+      "generated_text": "One useful validation check is ensuring an **email address** contains an \"@\" symbol and a valid domain name.<turn|>"
+    },
+    {
+      "run": 2,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.4687181250192225,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 69.92070899650396,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.209349834010936,
+      "first_output_seconds": 7.209349834010936,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.535687374998815,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 69.40113850833451,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.216193957981886,
+      "first_output_seconds": 7.216193957981886,
+      "generated_text": "One useful validation check is ensuring an **email address** contains an \"@\" symbol and a valid domain name.<turn|>"
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.573168790986529,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 65.45928733486835,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.305499874986708,
+      "first_output_seconds": 7.305779290996725,
+      "generated_text": "All modules (0 through 399) validate input fields before returning structured records.<turn|>"
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.6790838329761755,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 67.98931262222611,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.22220858299988322,
+      "first_output_seconds": 0.22245479098637588,
+      "generated_text": "One useful validation check is ensuring that an **email address** contains both an \"@\" symbol and a valid domain extension (e.g., \".com\").<turn|>"
+    },
+    {
+      "run": 3,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    }
+  ]
+}
