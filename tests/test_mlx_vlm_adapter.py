@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 import tempfile
 import unittest
 from dataclasses import dataclass
@@ -166,11 +167,16 @@ class MLXVLMAcceleratorTests(unittest.TestCase):
         self.assertIsNone(stats.mean_token_logprob)
         self.assertIsNone(stats.minimum_token_logprob)
 
-    def test_long_text_uses_safe_chunked_prefill_step(self):
+    def test_long_text_keeps_native_prefill_default(self):
         self.accelerator._apply_chat_template = lambda *args, **kwargs: "x" * 16_000
-        self.accelerator.generate("x" * 16_000, max_tokens=1)
+        with patch.dict(os.environ, {"MACHBOOST_MLX_VLM_PREFILL_STEP": ""}):
+            self.accelerator.generate("x" * 16_000, max_tokens=1)
+        self.assertNotIn("prefill_step_size", self.stream.calls[-1]["kwargs"])
 
-        self.assertEqual(self.stream.calls[-1]["kwargs"]["prefill_step_size"], 4_096)
+    def test_prefill_step_is_explicit_opt_in(self):
+        with patch.dict(os.environ, {"MACHBOOST_MLX_VLM_PREFILL_STEP": "4096"}):
+            self.accelerator.generate("hello", max_tokens=1)
+        self.assertEqual(self.stream.calls[-1]["kwargs"]["prefill_step_size"], 4096)
 
     def test_reports_selected_token_logprob_without_counting_final_row_twice(self):
         def confidence_stream(model, processor, prompt, **kwargs):
