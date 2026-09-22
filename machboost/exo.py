@@ -91,17 +91,47 @@ def parse_cluster_state(state: dict[str, Any]) -> dict[str, Any]:
 def require_placement(
     snapshot: dict[str, Any], model: str, *, min_nodes: int = 2, sharding: str = "tensor"
 ) -> dict[str, Any]:
+    model_instances = [
+        item for item in snapshot.get("instances", []) if item.get("model") == model
+    ]
     candidates = [
-        item for item in snapshot.get("instances", [])
-        if item.get("model") == model
-        and len(item.get("nodes") or []) >= min_nodes
+        item for item in model_instances
+        if len(item.get("nodes") or []) >= min_nodes
         and item.get("sharding") == sharding
     ]
     if not candidates:
         raise ExoClusterError(
             f"No active {sharding} instance of {model} spans {min_nodes}+ EXO nodes"
         )
-    return max(candidates, key=lambda item: len(item["nodes"]))
+    if len(model_instances) != 1:
+        raise ExoClusterError(
+            f"EXO has {len(model_instances)} instances of {model}; its scheduler may choose "
+            "a different placement. Leave one instance before benchmarking."
+        )
+    return candidates[0]
+
+
+def require_rdma_placement(snapshot: dict[str, Any], placement: dict[str, Any]) -> None:
+    if placement.get("transport") != "jaccl":
+        raise ExoClusterError("The selected EXO placement does not use JACCL/RDMA")
+    nodes = set(placement["nodes"])
+    links = snapshot.get("rdma_links") or []
+    connected = {next(iter(nodes))}
+    while True:
+        reachable = connected | {
+            target
+            for source, target in links
+            if source in connected and target in nodes
+        } | {
+            source
+            for source, target in links
+            if target in connected and source in nodes
+        }
+        if reachable == connected:
+            break
+        connected = reachable
+    if connected != nodes:
+        raise ExoClusterError("The selected EXO placement is not connected by RDMA links")
 
 
 def _sse_events(lines: Iterator[bytes]) -> Iterator[tuple[str, str]]:
@@ -274,6 +304,8 @@ class ExoClusterClient:
                     finish_reason = choice.get("finish_reason") or finish_reason
         if not completed:
             raise ExoClusterError("Upstream chat stream ended before [DONE]")
+        if not content and not reasoning and not tool_call_events:
+            raise ExoClusterError("Upstream chat stream completed without model output")
         return ChatMeasurement(
             total_seconds=time.perf_counter() - started,
             first_output_seconds=first_output,
