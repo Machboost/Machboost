@@ -150,7 +150,8 @@ inputs require separate workload coverage. No general 2x claim follows here.
 
 Validation: the Python suite ran 687 tests (682 passed, five optional tests
 skipped); Go tests passed; wheel packaging succeeded. The community app was updated
-locally and its ad-hoc signature verified. No public release was created.
+locally and its ad-hoc signature verified. No public release was created during
+the audit; these fixes are included in [0.16.27](../release-notes/0.16.27.md).
 
 ## Reproduce
 
