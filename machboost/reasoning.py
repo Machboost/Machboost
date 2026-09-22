@@ -86,6 +86,8 @@ class ThinkingStreamSplitter:
         "<|START_TEXT|>",
         "<|END_TEXT|>",
         "<|eot|>",
+        "<turn|>",
+        "<end_turn|>",
     )
 
     def __init__(
