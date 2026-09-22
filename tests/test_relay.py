@@ -67,6 +67,36 @@ class ClaudeLoopbackRelayTests(unittest.TestCase):
         with urlopen(self.endpoint + "/health") as response:
             self.assertEqual(response.status, 200)
 
+    def test_websocket_upgrade_selects_http_fallback(self):
+        request = Request(self.endpoint + "/v1/responses", headers={
+            "Authorization": "Bearer claude-local-secret",
+            "Connection": "Upgrade", "Upgrade": "websocket",
+        })
+        with self.assertRaises(HTTPError) as error:
+            urlopen(request)
+        self.assertEqual(error.exception.code, 426)
+
+    def test_zstd_request_is_decoded_before_forwarding(self):
+        import zstandard
+
+        body = b'{"model":"shared-model","stream":true}'
+        request = Request(self.endpoint + "/v1/responses",
+            data=zstandard.ZstdCompressor().compress(body), headers={
+                "Authorization": "Bearer claude-local-secret",
+                "Content-Encoding": "zstd", "Content-Type": "application/json",
+            })
+        with urlopen(request) as response:
+            response.read()
+        self.assertEqual(self.upstream.request_body, body)
+
+    def test_invalid_compressed_request_returns_clear_error(self):
+        request = Request(self.endpoint + "/v1/responses", data=b"invalid", headers={
+            "Authorization": "Bearer claude-local-secret", "Content-Encoding": "zstd",
+        })
+        with self.assertRaises(HTTPError) as error:
+            urlopen(request)
+        self.assertEqual(error.exception.code, 400)
+
     def test_gateway_requires_its_private_local_token(self):
         with self.assertRaises(HTTPError) as error:
             urlopen(self.endpoint + "/v1/models")

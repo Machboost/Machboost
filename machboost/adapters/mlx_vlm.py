@@ -583,6 +583,14 @@ class MLXVLMAccelerator:
                 "temperature": temperature,
                 "enable_thinking": enable_thinking,
             }
+            # Preserve the backend's default. Changing prefill shapes can alter
+            # greedy output and is not reliably faster on uncached prompts.
+            prefill_override = os.environ.get("MACHBOOST_MLX_VLM_PREFILL_STEP", "").strip()
+            if prefill_override:
+                try:
+                    stream_options["prefill_step_size"] = max(1, int(prefill_override))
+                except ValueError:
+                    pass
             if thinking_budget is not None:
                 stream_options["thinking_budget"] = thinking_budget
                 if config_value(self.model.config, "model_type", "") == "muse_glimmer":

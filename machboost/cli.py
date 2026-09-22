@@ -11,6 +11,7 @@ import platform
 import shutil
 import sys
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from importlib import metadata
 from pathlib import Path
@@ -1251,6 +1252,8 @@ def run_native_chat(
         return 2
 
     configure_chat_reasoning(args)
+    cache_key = f"cli:{uuid.uuid4().hex}"
+    generation_parameters = inspect.signature(accelerator.generate_chat).parameters
     try:
         active_images, has_video_frames = prepare_visual_inputs(args, stream=error_stream)
     except Exception as exc:
@@ -1291,6 +1294,7 @@ def run_native_chat(
             return 0
         if command == "/clear":
             turns = []
+            cache_key = f"cli:{uuid.uuid4().hex}"
             console.notice("Chat history cleared.") if console.pretty else print(
                 "chat history cleared", file=output_stream
             )
@@ -1376,11 +1380,13 @@ def run_native_chat(
                 "max_tokens": args.max_tokens,
                 "on_text": emit,
             }
-            if "on_thinking" in inspect.signature(
-                accelerator.generate_chat
-            ).parameters:
+            if "on_thinking" in generation_parameters:
                 kwargs["on_thinking"] = emit_thinking
-            kwargs["enable_thinking"] = args.think or False
+            kwargs["enable_thinking"] = bool(args.think)
+            if "reasoning_strength" in generation_parameters and args.think:
+                kwargs["reasoning_strength"] = args.think
+            if "cache_key" in generation_parameters:
+                kwargs["cache_key"] = cache_key
             if getattr(accelerator, "supports_vision", False):
                 kwargs.update(
                     use_vision_cache=not args.no_vision_cache,
@@ -3135,6 +3141,9 @@ def print_context_benchmark(artifact: dict, *, stream=None) -> None:
 
 def print_latency_benchmark(artifact: dict, *, stream=None) -> None:
     stream = stream or sys.stdout
+    def duration(value):
+        return "n/a" if value is None else f"{float(value):.3f}s"
+
     config = artifact["config"]
     print(
         f"chat latency: {config['runs']} measured run(s), "
@@ -3154,19 +3163,32 @@ def print_latency_benchmark(artifact: dict, *, stream=None) -> None:
                 f"compile={float(data.get('compile_warmup_seconds') or 0.0):.3f}s",
                 file=stream,
             )
+        answer_median = (
+            summary["median_client_ttft_seconds"]
+            if any(row.get("client_ttft_seconds") is not None for row in data["rows"])
+            else None
+        )
         print(
             f"  median wall={summary['median_wall_seconds']:.3f}s "
-            f"ttft={summary['median_client_ttft_seconds']:.3f}s "
+            f"first_answer={duration(answer_median)} "
             f"decode={summary['median_tokens_per_second']:.2f} tokens/s",
             file=stream,
         )
         for row in data["rows"]:
             print(
                 f"  run {row['run']}: wall={row['wall_seconds']:.3f}s "
-                f"ttft={float(row['client_ttft_seconds'] or 0.0):.3f}s "
+                f"first_answer={duration(row.get('client_ttft_seconds'))} "
                 f"tokens={row['eval_count']} rate={row['tokens_per_second']:.2f}",
                 file=stream,
             )
+            first_output = row.get("client_first_output_seconds")
+            if first_output is not None:
+                print(
+                    f"    first_output={first_output:.3f}s "
+                    f"cached_prompt_tokens={row.get('cached_prompt_tokens') if row.get('cached_prompt_tokens') is not None else 'unknown'} "
+                    f"queue={duration(row.get('queue_seconds'))}",
+                    file=stream,
+                )
     comparison = artifact.get("comparison")
     if comparison:
         output_equal = comparison.get("median_output_equal")
@@ -3174,7 +3196,7 @@ def print_latency_benchmark(artifact: dict, *, stream=None) -> None:
         print(
             "comparison: "
             f"MachBoost wall={comparison['machboost_total_speedup_vs_ollama']:.3f}x "
-            f"TTFT={comparison['machboost_ttft_speedup_vs_ollama']:.3f}x "
+            f"first_answer={comparison['machboost_ttft_speedup_vs_ollama']:.3f}x "
             f"output_equal={output_label} "
             "relative to Ollama",
             file=stream,
@@ -3185,6 +3207,7 @@ def print_latency_benchmark(artifact: dict, *, stream=None) -> None:
             file=stream,
         )
     print("note: plain chat uses the native backend when no draft context is supplied", file=stream)
+    print("note: nonces prevent exact repeats, not shared-prefix cache reuse", file=stream)
 
 
 def run_ps(args: argparse.Namespace, *, output_stream=None, error_stream=None) -> int:
@@ -3236,6 +3259,14 @@ def run_ps(args: argparse.Namespace, *, output_stream=None, error_stream=None) -
 def run_server_action(args: argparse.Namespace, action: str, *, output_stream=None, error_stream=None) -> int:
     output_stream = output_stream or sys.stdout
     error_stream = error_stream or sys.stderr
+    if action == "start":
+        try:
+            client, started = ensure_server(args.endpoint, timeout=args.timeout, headless=args.headless)
+        except MachBoostAPIError as exc:
+            print(f"machboost start error: {exc}", file=error_stream)
+            return 2
+        print(f"MachBoost server {'started' if started else 'already running'} at {client.endpoint}", file=output_stream)
+        return 0
     client = MachBoostClient(args.endpoint, timeout=args.timeout)
     if not client.is_healthy():
         print("MachBoost server is not running.", file=error_stream)
@@ -3531,6 +3562,9 @@ def build_parser() -> argparse.ArgumentParser:
     stop.add_argument("model", nargs="?", help="Model to unload. Omit to unload every model.")
     add_server_connection_arguments(stop)
 
+    start = subcommands.add_parser("start", help="Start or reuse the local resident server.")
+    add_server_connection_arguments(start)
+    start.add_argument("--headless", action="store_true", help="Start without opening the Mac app (automatic over SSH).")
     shutdown = subcommands.add_parser("shutdown", help="Stop the resident server and unload every model.")
     add_server_connection_arguments(shutdown)
 
@@ -4000,6 +4034,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return run_server_action(args, "stop")
     if args.command == "shutdown":
         return run_server_action(args, "shutdown")
+    if args.command == "start":
+        return run_server_action(args, "start")
     if args.command == "ollama" and args.ollama_command == "run":
         return run_ollama_chat(args)
     parser.print_help()

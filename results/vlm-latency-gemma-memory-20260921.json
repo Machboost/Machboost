@@ -1,0 +1,202 @@
+{
+  "schema": "machboost.vlm_latency_audit.v1",
+  "model": "lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit",
+  "load_seconds": 5.55188799998723,
+  "cache": "memory",
+  "context_lines": 400,
+  "max_tokens": 32,
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "versions": {
+    "mlx": "0.32.0",
+    "mlx-vlm": "0.6.13",
+    "mlx-lm": "0.31.3"
+  },
+  "measurement": "Same loaded weights, template, reasoning settings, and greedy sampling; adapter only.",
+  "notes": [
+    "Native baseline has no cross-request prompt cache; MachBoost uses its normal prefix cache.",
+    "Cold rows compare wrapper overhead. Follow-ups measure cache reuse, not faster cold inference.",
+    "Follow-up history is fixed to keep both inputs identical regardless of first-turn output.",
+    "Chunked/cached prefill can change greedy tokens through floating-point differences; equality is measured, not assumed.",
+    "Warmup/load is excluded; disk cache is temporary and unique to this invocation."
+  ],
+  "rows": [
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.437217833008617,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 70.75087460390131,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.180423042009352,
+      "first_output_seconds": 7.180423042009352
+    },
+    {
+      "run": 1,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.54945795799722,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 69.81666295747728,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.231875833007507,
+      "first_output_seconds": 7.231875833007507
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.526620291988365,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 68.39202540841464,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.268286667007487,
+      "first_output_seconds": 7.268464791995939
+    },
+    {
+      "run": 1,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.6600974170141853,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 68.82149639313803,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.20815770799526945,
+      "first_output_seconds": 0.20832641699234955
+    },
+    {
+      "run": 1,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.535605499986559,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 68.09737873092499,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.276917207986116,
+      "first_output_seconds": 7.277097624988528
+    },
+    {
+      "run": 2,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.6698567919956986,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 67.16311979801269,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.20700541700352915,
+      "first_output_seconds": 0.20718079200014472
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.460900125006447,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 69.93547532257764,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.201653541997075,
+      "first_output_seconds": 7.201653541997075
+    },
+    {
+      "run": 2,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.529764625011012,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 69.90351169913052,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.213220000005094,
+      "first_output_seconds": 7.213220000005094
+    },
+    {
+      "run": 2,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "cold",
+      "wall_seconds": 7.465101500012679,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 69.7209862650918,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.204981667018728,
+      "first_output_seconds": 7.204981667018728
+    },
+    {
+      "run": 3,
+      "mode": "native",
+      "phase": "followup",
+      "wall_seconds": 7.5202838749974035,
+      "prompt_tokens": 5549,
+      "generated_tokens": 23,
+      "generation_tokens_per_second": 70.58414632934769,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "664759294dfe2156bd4006387cb2ec114f14a747586045782eef09f50671958d",
+      "first_native_chunk_seconds": 7.2066602499980945,
+      "first_output_seconds": 7.2066602499980945
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "cold",
+      "wall_seconds": 7.507714874984231,
+      "prompt_tokens": 5522,
+      "generated_tokens": 19,
+      "generation_tokens_per_second": 67.52740413333844,
+      "cached_prompt_tokens": 0,
+      "token_sha256": "3536a26de6407b2ed58d13d221a751e8b494ee39a1a6f9feca87fe16baeb05e6",
+      "first_native_chunk_seconds": 7.246468208992155,
+      "first_output_seconds": 7.246716124995146
+    },
+    {
+      "run": 3,
+      "mode": "machboost",
+      "phase": "followup",
+      "wall_seconds": 0.6573660419962835,
+      "prompt_tokens": 5549,
+      "generated_tokens": 32,
+      "generation_tokens_per_second": 68.79114872905443,
+      "cached_prompt_tokens": 5506,
+      "token_sha256": "c98bf8d15c8aa9bccfbfd3f598a2d36f4810c163897d96ea9f85f60a6379f7f9",
+      "first_native_chunk_seconds": 0.20568483401439153,
+      "first_output_seconds": 0.20586183399427682
+    },
+    {
+      "run": 3,
+      "exact_token_outputs": {
+        "cold": true,
+        "followup": false
+      }
+    }
+  ]
+}

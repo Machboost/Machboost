@@ -1,5 +1,9 @@
 # Streaming latency verification
 
+For newer controlled cold/follow-up measurements and installed-app checks, see
+the [September 21 latency audit](latency-audit-20260921.md). It separates prompt
+cache reuse from cold-prefill performance and first output from first answer.
+
 Measured locally on 2026-09-05: Apple M5 Pro, 48 GiB unified memory, macOS
 26.6.2, bundled Python 3.13, MLX 0.32.0, MLX-LM 0.31.3, and MLX-VLM 0.6.13.
 This follows the [coding-client source audit](coding-client-latency.md).

@@ -1,0 +1,265 @@
+{
+  "schema": "machboost.claude_cli_audit.v1",
+  "date": "2026-09-22",
+  "client": "Claude Code 2.1.267",
+  "model": "mlx-community/Muse-Glimmer-30B-4bit",
+  "backend": "mlx-vlm",
+  "authentication_header": "x-api-key",
+  "task": "Read README.md and reply with only its verification phrase.",
+  "fixture": "# Streaming Test Fixture\n\nThe verification phrase is: violet compass.\n",
+  "settings": {
+    "bare": true,
+    "allowed_tools": [
+      "Read"
+    ],
+    "mcp_servers": {},
+    "setting_sources": [],
+    "session_persistence": false,
+    "max_turns": 3,
+    "effort": "low",
+    "timeout_seconds": 240
+  },
+  "notes": [
+    "Actual Claude CLI against the installed app daemon; not Claude Desktop UI.",
+    "First output counts thinking, text, or a tool call; first answer counts text only.",
+    "All timing includes client startup. Auth failure wall time is retries, not model inference.",
+    "No cloud inference or external tools used. Cached weights only; no downloads.",
+    "Default-tools cases expose the normal tool list but permit only Read; this is not a large-repository evaluation.",
+    "Each row is one task, not a statistical speedup claim. Cache state may differ across tasks.",
+    "Input usage was incorrectly zero before the final usage fix."
+  ],
+  "rows": [
+    {
+      "case": "before_auth_fix",
+      "tool_set": "read_only",
+      "exit_code": 1,
+      "first_output_seconds": null,
+      "first_answer_seconds": null,
+      "wall_seconds": 175.71226820800803,
+      "tools": [],
+      "answer": "",
+      "result": {
+        "subtype": "success",
+        "is_error": true,
+        "num_turns": 1,
+        "usage": {
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "input_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 0,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "Failed to authenticate. API Error: 401 {\"error\":\"authentication required\",\"code\":\"unauthorized\"}"
+      }
+    },
+    {
+      "case": "auth_fixed_first_load",
+      "tool_set": "read_only",
+      "exit_code": 0,
+      "first_output_seconds": 16.051243791996967,
+      "first_answer_seconds": 27.18142091698246,
+      "wall_seconds": 27.284661957994103,
+      "tools": [
+        "Read"
+      ],
+      "answer": "violet compass",
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "usage": {
+          "input_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 188,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "violet compass"
+      }
+    },
+    {
+      "case": "auth_fixed_resident_repeat",
+      "tool_set": "read_only",
+      "exit_code": 0,
+      "first_output_seconds": 6.458107334008673,
+      "first_answer_seconds": 17.581136875000084,
+      "wall_seconds": 17.67652145898319,
+      "tools": [
+        "Read"
+      ],
+      "answer": "violet compass",
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "usage": {
+          "input_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 188,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "violet compass"
+      }
+    },
+    {
+      "case": "usage_fixed_first_load",
+      "tool_set": "read_only",
+      "exit_code": 0,
+      "first_output_seconds": 13.132407208002405,
+      "first_answer_seconds": 23.78545125000528,
+      "wall_seconds": 23.88463754102122,
+      "tools": [
+        "Read"
+      ],
+      "answer": "violet compass",
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "usage": {
+          "input_tokens": 1299,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 188,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "violet compass"
+      }
+    },
+    {
+      "case": "usage_fixed_resident",
+      "tool_set": "default_tools",
+      "exit_code": 0,
+      "first_output_seconds": 12.05706654099049,
+      "first_answer_seconds": 22.72855466598412,
+      "wall_seconds": 22.82887662498979,
+      "tools": [
+        "Read"
+      ],
+      "answer": "violet compass",
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "usage": {
+          "input_tokens": 1781,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 258,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "violet compass"
+      }
+    },
+    {
+      "case": "usage_fixed_resident_repeat",
+      "tool_set": "default_tools",
+      "exit_code": 0,
+      "first_output_seconds": 12.064389042003313,
+      "first_answer_seconds": 22.650450666988036,
+      "wall_seconds": 22.747502666985383,
+      "tools": [
+        "Read"
+      ],
+      "answer": "violet compass",
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "usage": {
+          "input_tokens": 1781,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 258,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        },
+        "result": "violet compass"
+      }
+    }
+  ]
+}

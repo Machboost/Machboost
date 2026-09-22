@@ -16,6 +16,7 @@ from typing import Any, Optional
 from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
+from .http_body import MAX_BODY_BYTES, decode_body
 
 
 RELAY_SCHEMA = "machboost.claude-loopback-relay.v1"
@@ -101,6 +102,8 @@ def start_gateway_relay(
     log_path = log_dir / "claude-relay.log"
     command = [
         sys.executable,
+        "-I",
+        "-B",
         "-m",
         "machboost.relay",
         "serve",
@@ -214,11 +217,22 @@ class LoopbackRelayHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._send_json(401, {"error": "authentication required"})
             return
+        if self.headers.get("Upgrade", "").lower() == "websocket":
+            self._send_json(426, {"error": "Use HTTP POST with SSE streaming"})
+            return
         if not (self.path.startswith("/v1/") or self.path.startswith("/api/")):
             self._send_json(404, {"error": "unsupported relay endpoint"})
             return
-        length = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(length) if length else None
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            if length < 0 or length > MAX_BODY_BYTES:
+                raise ValueError("request body exceeds permitted size")
+            if self.headers.get("Transfer-Encoding"):
+                raise ValueError("Content-Length is required")
+            body = decode_body(self.rfile.read(length), self.headers.get("Content-Encoding", "")) if length else None
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
         upstream = self.server.upstream
         connection_class = (
             http.client.HTTPSConnection
@@ -231,7 +245,7 @@ class LoopbackRelayHandler(BaseHTTPRequestHandler):
             name: value
             for name, value in self.headers.items()
             if name.lower() not in HOP_BY_HOP_HEADERS
-            and name.lower() not in {"host", "authorization", "content-length"}
+            and name.lower() not in {"host", "authorization", "content-length", "content-encoding"}
         }
         headers["Authorization"] = f"Bearer {self.server.upstream_token}"
         if body is not None:

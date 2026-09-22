@@ -290,20 +290,13 @@ class ChatGPTProfileManager:
             text = _remove_root_assignment(text, key)
         for key, value in (
             ("model", primary),
-            ("model_provider", "machboost-desktop"),
             ("model_catalog_json", str(self.catalog_path)),
             ("openai_base_url", base_url),
         ):
             text = _set_root_string(text, key, value)
-        text = self._replace_provider(text, (
-            f'[{self.provider_table}]\n'
-            'name = "MachBoost"\n'
-            f'base_url = {json.dumps(base_url)}\n'
-            'wire_api = "responses"\n'
-            'requires_openai_auth = false\n'
-            'supports_websockets = false\n'
-            'stream_idle_timeout_ms = 300000\n'
-        ))
+        # Preserve desktop account controls. The relay handles HTTP fallback
+        # and the server implements Responses compaction for this provider path.
+        text = self._replace_provider(text, "")
         _validate_toml(text)
         _write_json(self.catalog_path, codex_model_catalog(selected_rows))
         _write_text(self.config_path, text)

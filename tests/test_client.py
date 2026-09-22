@@ -627,6 +627,28 @@ class ClientTests(unittest.TestCase):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_headless_and_ssh_skip_gui_and_use_bundled_runtime(self):
+        for headless, ssh in [(True, ""), (False, "test-ssh-session")]:
+            with self.subTest(headless=headless), tempfile.TemporaryDirectory() as tmp:
+                app = Path(tmp) / "MachBoost.app"
+                python = app / "Contents/Resources/runtime/python/bin/python3"
+                python.parent.mkdir(parents=True)
+                python.touch()
+                process = Mock(pid=42)
+                process.poll.return_value = None
+                with (
+                    patch.dict(os.environ, {"SSH_CONNECTION": ssh}),
+                    patch("machboost.client.Path.home", return_value=Path(tmp)),
+                    patch("machboost.client._installed_machboost_app", return_value=app),
+                    patch("machboost.client._wake_machboost_app") as wake,
+                    patch("machboost.client.MachBoostClient.health", side_effect=[
+                        MachBoostAPIError("offline"), {"status": "ok", "version": __version__}]),
+                    patch("machboost.client.subprocess.Popen", return_value=process) as spawn,
+                ):
+                    ensure_server(headless=headless, timeout=1)
+                wake.assert_not_called()
+                self.assertEqual(spawn.call_args.args[0][:3], [str(python), "-I", "-B"])
+
     def test_ensure_server_wakes_matching_installed_app_before_spawning_daemon(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp) / "MachBoost.app"
@@ -702,6 +724,7 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             with (
+                patch("machboost.client._installed_machboost_app", return_value=None),
                 patch("machboost.client.Path.home", return_value=home),
                 patch(
                     "machboost.client.MachBoostClient.health",
@@ -747,6 +770,7 @@ class BootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             with (
+                patch("machboost.client._installed_machboost_app", return_value=None),
                 patch("machboost.client.Path.home", return_value=home),
                 patch(
                     "machboost.client.MachBoostClient.health",

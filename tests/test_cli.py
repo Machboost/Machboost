@@ -15,6 +15,37 @@ from machboost.connections import ConnectionProfile
 
 
 class CLITests(unittest.TestCase):
+    def test_start_headless_dispatch(self):
+        with patch("machboost.cli.ensure_server", return_value=(SimpleNamespace(endpoint="http://127.0.0.1:11435"), True)) as start:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["start", "--headless"]), 0)
+        self.assertTrue(start.call_args.kwargs["headless"])
+
+    def test_run_vlm_cache_key_is_stable_only_within_one_chat(self):
+        accelerator = Mock()
+        accelerator.supports_vision = True
+        calls = []
+
+        def generate(messages, *, cache_key=None, reasoning_strength=None, **kwargs):
+            calls.append((cache_key, reasoning_strength, kwargs["enable_thinking"]))
+            return "ok", SimpleNamespace(generated_tokens=1)
+
+        accelerator.generate_chat = generate
+        with patch.object(cli, "load_native_accelerator", return_value=accelerator), patch.object(
+            cli, "prepare_visual_inputs", return_value=([], False)
+        ):
+            for _ in range(2):
+                code = cli.run_native_chat(cli.build_parser().parse_args([
+                    "run", "example", "--backend", "mlx", "--think", "high"
+                ]), input_func=Mock(side_effect=["hi", "again", "/clear", "hello", "/exit"]),
+                    output_stream=io.StringIO(), error_stream=io.StringIO())
+                self.assertEqual(code, 0)
+        keys = [call[0] for call in calls]
+        self.assertEqual(keys[0], keys[1])
+        self.assertEqual(keys[3], keys[4])
+        self.assertEqual(len(set(keys)), 4)
+        self.assertTrue(all(call[1:] == ("high", True) for call in calls))
+
     def test_mcp_command_keeps_top_level_dispatch_and_stdio_executable(self):
         args = cli.build_parser().parse_args(
             [
@@ -1132,7 +1163,7 @@ class CLITests(unittest.TestCase):
         output = io.StringIO()
         client = FakeResidentClient()
 
-        with patch.object(cli, "MachBoostClient", return_value=client):
+        with patch.object(cli, "_automatic_host_pool", return_value=None), patch.object(cli, "MachBoostClient", return_value=client):
             code = cli.run_ps(
                 cli.build_parser().parse_args(["ps"]),
                 output_stream=output,
