@@ -3,7 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 import unittest
 
-from machboost.latency import LATENCY_SCHEMA, benchmark_chat_latency
+from machboost.latency import (
+    LATENCY_SCHEMA, benchmark_chat_latency, measure_machboost_chat,
+    measure_ollama_chat,
+)
 
 
 class StepClock:
@@ -100,6 +103,59 @@ class FakeOllamaAdapter:
 
 
 class ChatLatencyTests(unittest.TestCase):
+    def test_nonce_is_fresh_across_benchmark_invocations(self):
+        client = FakeMachBoostClient()
+        artifacts = [benchmark_chat_latency(
+            "example", prompt="hey", system="Be concise.", runs=1, warmups=0,
+            engine="machboost", machboost_client=client, clock=StepClock(),
+        ) for _ in range(2)]
+        self.assertNotEqual(artifacts[0]["config"]["benchmark_id"], artifacts[1]["config"]["benchmark_id"])
+        self.assertNotEqual(client.messages[0], client.messages[1])
+        self.assertIn("not guaranteed cold", " ".join(artifacts[0]["notes"]))
+
+    def test_first_reasoning_or_tool_and_answer_have_separate_timings(self):
+        for first_message in ({"thinking": "Considering"}, {"tool_calls": [{"function": {"name": "read"}}]}):
+            events = [
+                {"message": {}},
+                {"message": first_message},
+                {"message": {"content": "Answer"}},
+                {"done": True, "machboost": {
+                    "stats": {"prompt_cache_prefix_tokens": 512},
+                    "scheduler": {"queue_wait_seconds": 0.25},
+                }},
+            ]
+            client = SimpleNamespace(chat=lambda *args, **kwargs: iter(events))
+            row = measure_machboost_chat(
+                client, "example", [], run=1, options={}, keep_alive="5m", clock=StepClock(),
+            )
+            self.assertAlmostEqual(row["client_first_output_seconds"], 0.1)
+            self.assertAlmostEqual(row["client_ttft_seconds"], 0.2)
+            self.assertEqual(row["cached_prompt_tokens"], 512)
+            self.assertEqual(row["queue_seconds"], 0.25)
+
+    def test_reasoning_only_does_not_invent_an_answer_latency(self):
+        client = SimpleNamespace(chat=lambda *args, **kwargs: iter([
+            {"message": {"thinking": "Considering"}}, {"done": True},
+        ]))
+        row = measure_machboost_chat(
+            client, "example", [], run=1, options={}, keep_alive="5m", clock=StepClock(),
+        )
+        self.assertIsNone(row["client_ttft_seconds"])
+        self.assertAlmostEqual(row["client_first_output_seconds"], 0.1)
+        self.assertIsNone(row["cached_prompt_tokens"])
+
+    def test_ollama_uses_the_same_reasoning_timing_definition(self):
+        adapter = SimpleNamespace(chat=lambda *args, **kwargs: iter([
+            SimpleNamespace(content="", thinking="Considering", done=False, raw={}),
+            SimpleNamespace(content="Answer", thinking="", done=False, raw={}),
+            SimpleNamespace(content="", done=True, raw={}),
+        ]))
+        row = measure_ollama_chat(
+            adapter, [], run=1, max_tokens=8, keep_alive="5m", draft_num_predict=None, clock=StepClock(),
+        )
+        self.assertAlmostEqual(row["client_first_output_seconds"], 0.1)
+        self.assertAlmostEqual(row["client_ttft_seconds"], 0.2)
+
     def test_compares_warm_streaming_latency_with_unique_prompts(self) -> None:
         trace = []
         machboost = FakeMachBoostClient(trace)
