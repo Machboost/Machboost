@@ -9,6 +9,7 @@ import time
 import types
 import unittest
 from dataclasses import dataclass
+from http.client import HTTPConnection
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -2144,6 +2145,23 @@ class HTTPServerTests(unittest.TestCase):
                         )
                     self.assertEqual(raised.exception.code, 401)
 
+            for name, values in (
+                ("Authorization", ("Bearer top-secret", "Bearer wrong")),
+                ("X-Api-Key", ("top-secret", "wrong")),
+            ):
+                with self.subTest(duplicate_header=name):
+                    connection = HTTPConnection(host, port, timeout=2)
+                    try:
+                        connection.putrequest("GET", "/v1/models")
+                        for value in values:
+                            connection.putheader(name, value)
+                        connection.endheaders()
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 401)
+                        response.read()
+                    finally:
+                        connection.close()
+
             with self.assertRaises(HTTPError) as raised:
                 urlopen(
                     Request(
@@ -2154,12 +2172,32 @@ class HTTPServerTests(unittest.TestCase):
                 )
             self.assertEqual(raised.exception.code, 401)
 
-            authorized = Request(
-                f"http://{host}:{port}/api/metrics",
-                headers={"Authorization": "Bearer top-secret"},
-            )
-            with urlopen(authorized, timeout=2.0) as response:
-                self.assertEqual(json.loads(response.read())["schema"], "machboost.metrics.v1")
+            for headers in (
+                {"Authorization": "Bearer top-secret"},
+                {"Authorization": "bearer top-secret"},
+                {"X-Api-Key": "top-secret"},
+                {"Authorization": "Bearer top-secret", "X-Api-Key": "wrong"},
+            ):
+                with self.subTest(headers=headers):
+                    authorized = Request(
+                        f"http://{host}:{port}/api/metrics", headers=headers,
+                    )
+                    with urlopen(authorized, timeout=2.0) as response:
+                        self.assertEqual(json.loads(response.read())["schema"], "machboost.metrics.v1")
+            for headers in (
+                {"X-Api-Key": "wrong"},
+                {"X-Api-Key": ""},
+                {"X-Api-Key": "caf\u00e9"},
+                {"Authorization": "Bearer wrong", "X-Api-Key": "top-secret"},
+                {"Authorization": "Basic top-secret", "X-Api-Key": "top-secret"},
+                {"Authorization": "", "X-Api-Key": "top-secret"},
+            ):
+                with self.subTest(headers=headers):
+                    with self.assertRaises(HTTPError) as raised:
+                        urlopen(Request(
+                            f"http://{host}:{port}/v1/models", headers=headers,
+                        ), timeout=2.0)
+                    self.assertEqual(raised.exception.code, 401)
         finally:
             server.shutdown()
             server.server_close()
@@ -2840,6 +2878,9 @@ More generic harness instructions.
         self.assertEqual(event_types[0], "message_start")
         self.assertIn("content_block_delta", event_types)
         self.assertEqual(event_types[-1], "message_stop")
+
+        final_usage = next(event["usage"] for event in events if event["type"] == "message_delta")
+        self.assertEqual(final_usage, {"input_tokens": 12, "output_tokens": 2})
 
     def test_anthropic_whitespace_thinking_does_not_follow_answer(self):
         from machboost.server import GenerationResult
@@ -3699,6 +3740,39 @@ class TeamGatewayHTTPTests(unittest.TestCase):
         self.assertEqual(response["choices"][0]["message"]["content"], "hello world")
         self.assertEqual(trace_response["trace"]["input"][0]["content"], "hello team")
         self.assertEqual(trace_response["trace"]["output"], "hello world")
+
+    def test_anthropic_api_key_preserves_team_permissions(self) -> None:
+        token = self.create_employee_key()
+
+        def request(path, payload=None, *, key=token):
+            headers = {"X-Api-Key": key, "Content-Type": "application/json"}
+            data = None if payload is None else json.dumps(payload).encode()
+            with urlopen(Request(self.base_url + path, headers=headers, data=data), timeout=3) as response:
+                return json.loads(response.read())
+
+        payload = {
+            "model": "mlx-community/example",
+            "messages": [{"role": "user", "content": "hello team"}],
+            "max_tokens": 16,
+        }
+        response = request("/v1/messages", payload)
+        self.assertEqual(response["content"][0]["text"], "hello world")
+        self.assertIn("data", request("/v1/models"))
+        self.assertIn("input_tokens", request("/v1/messages/count_tokens", payload))
+        with self.assertRaises(HTTPError) as admin_error:
+            request("/api/team/keys")
+        self.assertEqual(admin_error.exception.code, 403)
+        with self.assertRaises(HTTPError) as model_error:
+            request("/v1/messages", dict(payload, model="mlx-community/denied"))
+        self.assertEqual(model_error.exception.code, 403)
+        read_only = self.team_store.create_key("Read only", scopes=("models:read",))
+        with self.assertRaises(HTTPError) as scope_error:
+            request("/v1/messages", payload, key=read_only.token)
+        self.assertEqual(scope_error.exception.code, 403)
+        self.team_store.revoke_key(self.team_store.authenticate(token).id)
+        with self.assertRaises(HTTPError) as revoked_error:
+            request("/v1/models")
+        self.assertEqual(revoked_error.exception.code, 401)
 
     def test_employee_cannot_manage_keys_or_use_disallowed_model(self) -> None:
         token = self.create_employee_key()
