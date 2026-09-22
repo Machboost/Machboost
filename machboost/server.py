@@ -4313,7 +4313,10 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 ),
                 "stop_sequence": None,
             },
-            usage={"output_tokens": usage["completion_tokens"]},
+            usage={
+                "input_tokens": usage["prompt_tokens"],
+                "output_tokens": usage["completion_tokens"],
+            },
         )
         self.remember_exchange(
             prepared.memory,
@@ -5075,10 +5078,19 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
     def authorize(self) -> bool:
         expected = str(self.server.api_token or "")  # type: ignore[attr-defined]
-        supplied = self.headers.get("Authorization", "")
-        prefix = "Bearer "
-        token = supplied[len(prefix) :] if supplied.startswith(prefix) else ""
-        if expected and token and hmac.compare_digest(token, expected):
+        authorization = self.headers.get_all("Authorization", [])
+        api_keys = self.headers.get_all("X-Api-Key", [])
+        token = ""
+        # Anthropic clients may send X-Api-Key. An explicit Authorization header
+        # takes precedence, even when invalid; never downgrade to another key.
+        if len(authorization) <= 1 and len(api_keys) <= 1:
+            if authorization:
+                parts = authorization[0].split()
+                if len(parts) == 2 and parts[0].lower() == "bearer":
+                    token = parts[1]
+            elif api_keys:
+                token = api_keys[0]
+        if expected and token and hmac.compare_digest(token.encode(), expected.encode()):
             self._principal = TeamPrincipal(
                 id="admin",
                 name="Administrator",
