@@ -9,7 +9,7 @@ const repository = repositoryPattern.test(configuredRepository)
   ? configuredRepository
   : pageOwner && pageProject
     ? `${pageOwner}/${pageProject}`
-    : "";
+    : "Machboost/Machboost";
 const repositoryURL = repository
   ? `https://github.com/${repository}`
   : "https://github.com";
@@ -60,7 +60,7 @@ function initializeMobileNavigation() {
 }
 
 function initializeTabs() {
-  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const tabs = [...document.querySelectorAll('.code-tabs [role="tab"]')];
   function select(tab, focus = false) {
     tabs.forEach((item) => {
       const selected = item === tab;
@@ -69,6 +69,97 @@ function initializeTabs() {
       document.getElementById(item.getAttribute("aria-controls")).hidden =
         !selected;
     });
+    if (focus) tab.focus();
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (event) => {
+      const targets = {
+        ArrowRight: (index + 1) % tabs.length,
+        ArrowLeft: (index + tabs.length - 1) % tabs.length,
+        Home: 0,
+        End: tabs.length - 1,
+      };
+      if (Object.hasOwn(targets, event.key)) {
+        event.preventDefault();
+        select(tabs[targets[event.key]], true);
+      }
+    });
+  });
+}
+
+function initializeWorkflow() {
+  const examples = {
+    chat: {
+      question: "What should I know before the next release?",
+      answer:
+        "The release notes mention three changes: a new search endpoint, stricter input validation, and an updated client SDK.",
+      activity: "Context: release-notes.md",
+      input: "Ask a follow-up...",
+      label: "YOUR MODEL. YOUR CONTEXT.",
+      title: "Pick up the conversation.",
+      description:
+        "Keep files attached across follow-ups and your model resident between requests. Your next question doesn't have to start over.",
+      link: "Meet the app",
+      href: "#product",
+    },
+    code: {
+      question: "Add a check for an empty search query.",
+      answer:
+        "I read the search handler and added input validation. The change is ready for you to review in the workspace diff.",
+      activity: "Read search.py → edited validation → review diff",
+      input: "Review the change or ask for another...",
+      label: "A WORKSPACE, WITH YOUR PERMISSION",
+      title: "From context to a change.",
+      description:
+        "Use a model with tool support to inspect your repository and make focused edits. Choose access permissions and keep the changes in view.",
+      link: "Explore coding in the app",
+      href: "#product",
+    },
+    team: {
+      question: "Use the team's Studio for this conversation.",
+      answer:
+        "This conversation uses the shared host's model. Your repository tools stay on this computer; inference requests go to the Studio.",
+      activity: "Shared host: Studio · model resident",
+      input: "Ask using the connected host...",
+      label: "YOUR NETWORK. A SHARED MODEL.",
+      title: "Give compute some company.",
+      description:
+        "Keep models loaded on a shared Mac. Connect with a scoped key and let teammates use the same server from their app or compatible API client.",
+      link: "See the shared setup",
+      href: "#team",
+    },
+  };
+  const tabs = [...document.querySelectorAll("[data-workflow]")];
+  function select(tab, focus = false) {
+    const example = examples[tab.dataset.workflow];
+    tabs.forEach((item) => {
+      const selected = item === tab;
+      item.setAttribute("aria-selected", String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    });
+    document
+      .getElementById("workflow-panel")
+      .setAttribute("aria-labelledby", tab.id);
+    for (const field of [
+      "question",
+      "answer",
+      "label",
+      "title",
+      "description",
+    ]) {
+      document.getElementById(`demo-${field}`).textContent = example[field];
+    }
+    document.querySelector("#demo-activity > span").textContent =
+      example.activity;
+    document.getElementById("demo-input-text").textContent = example.input;
+    const link = document.getElementById("demo-link");
+    link.replaceChildren(document.createTextNode(`${example.link} `));
+    const icon = document.createElement("i");
+    icon.dataset.lucide = "arrow-up-right";
+    link.append(icon);
+    link.href = example.href;
+    initializeIcons();
     if (focus) tab.focus();
   }
   tabs.forEach((tab, index) => {
@@ -184,5 +275,6 @@ initializeIcons();
 initializeRepositoryLinks();
 initializeMobileNavigation();
 initializeTabs();
+initializeWorkflow();
 initializeCopyButtons();
 initializeRelease();
