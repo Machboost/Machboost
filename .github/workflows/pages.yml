@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Configure Pages
+        id: pages
         uses: actions/configure-pages@v5
 
       - name: Prepare site metadata
@@ -37,8 +38,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -R site/. _site/
-          REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
-          SITE_URL="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${REPOSITORY_NAME}"
+          SITE_URL="${{ steps.pages.outputs.base_url }}"
           sed -i "s|__MACHBOOST_REPOSITORY__|${GITHUB_REPOSITORY}|g" _site/index.html
           sed -i "s|__MACHBOOST_SITE_URL__|${SITE_URL}|g" _site/index.html
 
