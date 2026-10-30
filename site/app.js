@@ -88,6 +88,60 @@ function initializeTabs() {
   });
 }
 
+function autoplayWhileVisible(element, play) {
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
+  const timers = new Set();
+  let visible = false;
+  let running = false;
+  let settle = () => {};
+  const later = (action, delay) => {
+    if (!running) return;
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      if (running) action();
+    }, delay);
+    timers.add(timer);
+  };
+  const pause = () => {
+    running = false;
+    timers.forEach(clearTimeout);
+    timers.clear();
+    settle();
+    element.dataset.playback = motion.matches ? "reduced-motion" : "paused";
+  };
+  const update = () => {
+    const allowed =
+      visible &&
+      !document.hidden &&
+      !motion.matches &&
+      !element.contains(document.activeElement);
+    if (!allowed) {
+      if (running) pause();
+      else
+        element.dataset.playback = motion.matches ? "reduced-motion" : "paused";
+    } else if (!running) {
+      running = true;
+      element.dataset.playback = "playing";
+      settle = play(later);
+    }
+  };
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      visible = entry.isIntersecting;
+      update();
+    },
+    { threshold: 0.2 },
+  );
+  observer.observe(element);
+  element.addEventListener("focusin", update);
+  element.addEventListener("focusout", () => queueMicrotask(update));
+  document.addEventListener("visibilitychange", update);
+  motion.addEventListener("change", update);
+  window.addEventListener("pagehide", pause);
+  window.addEventListener("pageshow", update);
+  update();
+}
+
 function initializeWorkflow() {
   const examples = {
     chat: {
@@ -131,7 +185,9 @@ function initializeWorkflow() {
     },
   };
   const tabs = [...document.querySelectorAll("[data-workflow]")];
-  function select(tab, focus = false) {
+  let currentIndex = 0;
+  function select(tab, focus = false, later = null) {
+    currentIndex = tabs.indexOf(tab);
     const example = examples[tab.dataset.workflow];
     tabs.forEach((item) => {
       const selected = item === tab;
@@ -161,6 +217,25 @@ function initializeWorkflow() {
     link.href = example.href;
     initializeIcons();
     if (focus) tab.focus();
+    const output = document.getElementById("demo-answer");
+    const panel = document.getElementById("workflow-panel");
+    const finish = () => {
+      output.textContent = example.answer;
+      panel.setAttribute("aria-busy", "false");
+    };
+    if (later) {
+      output.textContent = "";
+      panel.setAttribute("aria-busy", "true");
+      let position = 0;
+      const write = () => {
+        position += 3;
+        output.textContent = example.answer.slice(0, position);
+        if (position < example.answer.length) later(write, 25);
+        else finish();
+      };
+      later(write, 350);
+    } else finish();
+    return finish;
   }
   tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => select(tab));
@@ -177,10 +252,21 @@ function initializeWorkflow() {
       }
     });
   });
+  autoplayWhileVisible(document.querySelector(".workflow-demo"), (later) => {
+    let settle = () => {};
+    const cycle = () => {
+      settle = select(tabs[currentIndex], false, later);
+      later(() => {
+        currentIndex = (currentIndex + 1) % tabs.length;
+        cycle();
+      }, 8000);
+    };
+    cycle();
+    return () => settle();
+  });
 }
 
 function initializeInferenceExample() {
-  const button = document.getElementById("run-inference");
   const flow = document.getElementById("compute-flow");
   const output = document.getElementById("compute-answer");
   const requestState = document.getElementById("request-state");
@@ -188,14 +274,6 @@ function initializeInferenceExample() {
   const status = document.getElementById("inference-status");
   const steps = [...flow.querySelectorAll("[data-compute-step]")];
   const answer = output.textContent.replace(/\s+/g, " ").trim();
-  const timers = new Set();
-  const later = (action, delay) => {
-    const timer = setTimeout(() => {
-      timers.delete(timer);
-      action();
-    }, delay);
-    timers.add(timer);
-  };
   const activate = (step) => {
     steps.forEach((item) => {
       item.classList.toggle("is-active", item.dataset.computeStep === step);
@@ -208,42 +286,38 @@ function initializeInferenceExample() {
     status.textContent =
       "Example complete. Illustrated playback, not live inference.";
     flow.setAttribute("aria-busy", "false");
-    button.disabled = false;
-    button.querySelector("span").textContent = "Replay example";
   };
-  button.addEventListener("click", () => {
-    button.disabled = true;
-    button.querySelector("span").textContent = "Playing example";
-    flow.setAttribute("aria-busy", "true");
-    requestState.textContent = "Request sent to the Studio";
-    modelState.textContent = "Model weights already loaded";
-    status.textContent =
-      "Illustrative playback: sending a request to a resident local model.";
-    output.textContent = "";
-    activate("request");
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      finish();
-      return;
-    }
-    later(() => {
-      activate("model");
-      modelState.textContent = "Processing the prompt with MLX";
-    }, 650);
-    later(() => {
-      activate("answer");
-      modelState.textContent = "Streaming the generated answer";
-      let position = 0;
-      const write = () => {
-        position += 2;
-        output.textContent = answer.slice(0, position);
-        if (position < answer.length) later(write, 30);
-        else finish();
-      };
-      write();
-    }, 1300);
-  });
-  window.addEventListener("pagehide", () => timers.forEach(clearTimeout), {
-    once: true,
+  autoplayWhileVisible(document.getElementById("inference-demo"), (later) => {
+    const cycle = () => {
+      flow.setAttribute("aria-busy", "true");
+      requestState.textContent = "Request sent to the Studio";
+      modelState.textContent = "Model weights already loaded";
+      status.textContent =
+        "Illustrative playback: a resident model answers a request.";
+      output.textContent = "";
+      activate("request");
+      later(() => {
+        activate("model");
+        modelState.textContent = "Processing the prompt with MLX";
+      }, 650);
+      later(() => {
+        activate("answer");
+        modelState.textContent = "Streaming the generated answer";
+        let position = 0;
+        const write = () => {
+          position += 2;
+          output.textContent = answer.slice(0, position);
+          if (position < answer.length) later(write, 30);
+          else {
+            finish();
+            later(cycle, 3500);
+          }
+        };
+        write();
+      }, 1300);
+    };
+    cycle();
+    return finish;
   });
 }
 
