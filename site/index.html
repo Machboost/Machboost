@@ -148,19 +148,12 @@
                 A local model, <em>doing the work.</em>
               </h2>
             </div>
-            <button
-              id="run-inference"
-              class="button button-outline"
-              type="button"
-              aria-controls="compute-flow"
-            >
-              <i data-lucide="play"></i><span>Run example</span>
-            </button>
           </div>
           <div
             id="compute-flow"
             class="compute-grid"
             aria-label="Illustrative inference request flow"
+            tabindex="0"
           >
             <div class="compute-step" data-compute-step="request">
               <i data-lucide="message-square-code"></i
@@ -190,7 +183,7 @@
             </div>
           </div>
           <div class="inference-foot">
-            <span id="inference-status" role="status" aria-live="polite"
+            <span id="inference-status"
               >Illustrative playback. No live model request.</span
             ><span>Requests go to the host. Answers come back to you.</span>
           </div>
@@ -234,7 +227,7 @@
                   height="20"
                 />
                 MachBoost <span class="demo-divider">/</span> Fieldnotes</span
-              ><span class="example-label">INTERACTIVE EXAMPLE</span>
+              ><span class="example-label">AUTO-PLAYING EXAMPLE</span>
             </div>
             <div
               class="workflow-tabs"
