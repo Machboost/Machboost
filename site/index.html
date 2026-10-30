@@ -16,7 +16,7 @@
     />
     <meta
       property="og:image"
-      content="__MACHBOOST_SITE_URL__/assets/machboost-terrace.webp"
+      content="__MACHBOOST_SITE_URL__/assets/machboost-terrace-v2.webp"
     />
     <meta property="og:url" content="__MACHBOOST_SITE_URL__/" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -26,7 +26,7 @@
     <link rel="apple-touch-icon" href="assets/machboost-icon.png" />
     <link
       rel="preload"
-      href="assets/machboost-terrace.webp"
+      href="assets/machboost-terrace-v2.webp"
       as="image"
       fetchpriority="high"
     />
@@ -96,8 +96,8 @@
       <section id="top" class="hero" aria-labelledby="hero-title">
         <img
           class="hero-art"
-          src="assets/machboost-terrace.webp"
-          alt="Painted lakeside terrace with a desktop Mac and two laptops connected by a green cable. An illustration of separate networked machines."
+          src="assets/machboost-terrace-v2.webp"
+          alt="Painted lakeside terrace with AI conversations on two laptops, connected to a shared desktop Mac by a green cable."
           width="1536"
           height="1024"
           fetchpriority="high"
@@ -121,7 +121,7 @@
               data-download
               ><i data-lucide="apple"></i> Download for Mac
               <i data-lucide="arrow-down"></i></a
-            ><a class="hero-secondary" href="#workflow"
+            ><a class="hero-secondary" href="#inference-demo"
               >See it in action <i data-lucide="arrow-down-right"></i
             ></a>
           </div>
@@ -133,6 +133,68 @@
         <div class="hero-caption">
           <span>FIG. 01 / YOUR OWN LITTLE AI NETWORK</span
           ><span>Models run on your hardware.</span>
+        </div>
+      </section>
+
+      <section
+        id="inference-demo"
+        class="inference-story"
+        aria-labelledby="inference-title"
+      >
+        <div class="shell">
+          <div class="inference-heading">
+            <div>
+              <p class="eyebrow">THE COMPUTE BEHIND THE CONVERSATION</p>
+              <h2 id="inference-title">
+                A local model, <em>doing the work.</em>
+              </h2>
+            </div>
+            <button
+              id="run-inference"
+              class="button button-outline"
+              type="button"
+              aria-controls="compute-flow"
+            >
+              <i data-lucide="play"></i><span>Run example</span>
+            </button>
+          </div>
+          <div
+            id="compute-flow"
+            class="compute-grid"
+            aria-label="Illustrative inference request flow"
+          >
+            <div class="compute-step" data-compute-step="request">
+              <i data-lucide="message-square-code"></i
+              ><span class="eyebrow">01 / YOUR REQUEST</span
+              ><strong>“Explain this API route.”</strong
+              ><span class="compute-detail" id="request-state"
+                >From a laptop, app, or API client</span
+              >
+            </div>
+            <i class="compute-arrow" data-lucide="arrow-right"></i>
+            <div class="compute-step" data-compute-step="model">
+              <i data-lucide="brain-circuit"></i
+              ><span class="eyebrow">02 / THE SHARED MAC</span
+              ><strong>Qwen2.5 3B · MLX</strong
+              ><span class="compute-detail" id="model-state"
+                >Model weights stay resident</span
+              >
+            </div>
+            <i class="compute-arrow" data-lucide="arrow-right"></i>
+            <div class="compute-step" data-compute-step="answer">
+              <i data-lucide="text-cursor-input"></i
+              ><span class="eyebrow">03 / STREAMED BACK</span>
+              <p id="compute-answer" class="compute-output">
+                An API route receives a request, runs a handler, and returns a
+                response.
+              </p>
+            </div>
+          </div>
+          <div class="inference-foot">
+            <span id="inference-status" role="status" aria-live="polite"
+              >Illustrative playback. No live model request.</span
+            ><span>Requests go to the host. Answers come back to you.</span>
+          </div>
         </div>
       </section>
 
