@@ -9,7 +9,7 @@ const repository = repositoryPattern.test(configuredRepository)
   ? configuredRepository
   : pageOwner && pageProject
     ? `${pageOwner}/${pageProject}`
-    : "";
+    : "Machboost/Machboost";
 const repositoryURL = repository
   ? `https://github.com/${repository}`
   : "https://github.com";
@@ -60,7 +60,7 @@ function initializeMobileNavigation() {
 }
 
 function initializeTabs() {
-  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const tabs = [...document.querySelectorAll('.code-tabs [role="tab"]')];
   function select(tab, focus = false) {
     tabs.forEach((item) => {
       const selected = item === tab;
@@ -85,6 +85,239 @@ function initializeTabs() {
         select(tabs[targets[event.key]], true);
       }
     });
+  });
+}
+
+function autoplayWhileVisible(element, play) {
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
+  const timers = new Set();
+  let visible = false;
+  let running = false;
+  let settle = () => {};
+  const later = (action, delay) => {
+    if (!running) return;
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      if (running) action();
+    }, delay);
+    timers.add(timer);
+  };
+  const pause = () => {
+    running = false;
+    timers.forEach(clearTimeout);
+    timers.clear();
+    settle();
+    element.dataset.playback = motion.matches ? "reduced-motion" : "paused";
+  };
+  const update = () => {
+    const allowed =
+      visible &&
+      !document.hidden &&
+      !motion.matches &&
+      !element.contains(document.activeElement);
+    if (!allowed) {
+      if (running) pause();
+      else
+        element.dataset.playback = motion.matches ? "reduced-motion" : "paused";
+    } else if (!running) {
+      running = true;
+      element.dataset.playback = "playing";
+      settle = play(later);
+    }
+  };
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      visible = entry.isIntersecting;
+      update();
+    },
+    { threshold: 0.2 },
+  );
+  observer.observe(element);
+  element.addEventListener("focusin", update);
+  element.addEventListener("focusout", () => queueMicrotask(update));
+  document.addEventListener("visibilitychange", update);
+  motion.addEventListener("change", update);
+  window.addEventListener("pagehide", pause);
+  window.addEventListener("pageshow", update);
+  update();
+}
+
+function initializeWorkflow() {
+  const examples = {
+    chat: {
+      question: "What should I know before the next release?",
+      answer:
+        "The release notes mention three changes: a new search endpoint, stricter input validation, and an updated client SDK.",
+      activity: "Context: release-notes.md",
+      input: "Ask a follow-up...",
+      label: "YOUR MODEL. YOUR CONTEXT.",
+      title: "Pick up the conversation.",
+      description:
+        "Keep files attached across follow-ups and your model resident between requests. Your next question doesn't have to start over.",
+      link: "Meet the app",
+      href: "#product",
+    },
+    code: {
+      question: "Add a check for an empty search query.",
+      answer:
+        "I read the search handler and added input validation. The change is ready for you to review in the workspace diff.",
+      activity: "Read search.py → edited validation → review diff",
+      input: "Review the change or ask for another...",
+      label: "A WORKSPACE, WITH YOUR PERMISSION",
+      title: "From context to a change.",
+      description:
+        "Use a model with tool support to inspect your repository and make focused edits. Choose access permissions and keep the changes in view.",
+      link: "Explore coding in the app",
+      href: "#product",
+    },
+    team: {
+      question: "Use the team's Studio for this conversation.",
+      answer:
+        "This conversation uses the shared host's model. Your repository tools stay on this computer; inference requests go to the Studio.",
+      activity: "Shared host: Studio · model resident",
+      input: "Ask using the connected host...",
+      label: "YOUR NETWORK. A SHARED MODEL.",
+      title: "Give compute some company.",
+      description:
+        "Keep models loaded on a shared Mac. Connect with a scoped key and let teammates use the same server from their app or compatible API client.",
+      link: "See the shared setup",
+      href: "#team",
+    },
+  };
+  const tabs = [...document.querySelectorAll("[data-workflow]")];
+  let currentIndex = 0;
+  function select(tab, focus = false, later = null) {
+    currentIndex = tabs.indexOf(tab);
+    const example = examples[tab.dataset.workflow];
+    tabs.forEach((item) => {
+      const selected = item === tab;
+      item.setAttribute("aria-selected", String(selected));
+      item.tabIndex = selected ? 0 : -1;
+    });
+    document
+      .getElementById("workflow-panel")
+      .setAttribute("aria-labelledby", tab.id);
+    for (const field of [
+      "question",
+      "answer",
+      "label",
+      "title",
+      "description",
+    ]) {
+      document.getElementById(`demo-${field}`).textContent = example[field];
+    }
+    document.querySelector("#demo-activity > span").textContent =
+      example.activity;
+    document.getElementById("demo-input-text").textContent = example.input;
+    const link = document.getElementById("demo-link");
+    link.replaceChildren(document.createTextNode(`${example.link} `));
+    const icon = document.createElement("i");
+    icon.dataset.lucide = "arrow-up-right";
+    link.append(icon);
+    link.href = example.href;
+    initializeIcons();
+    if (focus) tab.focus();
+    const output = document.getElementById("demo-answer");
+    const panel = document.getElementById("workflow-panel");
+    const finish = () => {
+      output.textContent = example.answer;
+      panel.setAttribute("aria-busy", "false");
+    };
+    if (later) {
+      output.textContent = "";
+      panel.setAttribute("aria-busy", "true");
+      let position = 0;
+      const write = () => {
+        position += 3;
+        output.textContent = example.answer.slice(0, position);
+        if (position < example.answer.length) later(write, 25);
+        else finish();
+      };
+      later(write, 350);
+    } else finish();
+    return finish;
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (event) => {
+      const targets = {
+        ArrowRight: (index + 1) % tabs.length,
+        ArrowLeft: (index + tabs.length - 1) % tabs.length,
+        Home: 0,
+        End: tabs.length - 1,
+      };
+      if (Object.hasOwn(targets, event.key)) {
+        event.preventDefault();
+        select(tabs[targets[event.key]], true);
+      }
+    });
+  });
+  autoplayWhileVisible(document.querySelector(".workflow-demo"), (later) => {
+    let settle = () => {};
+    const cycle = () => {
+      settle = select(tabs[currentIndex], false, later);
+      later(() => {
+        currentIndex = (currentIndex + 1) % tabs.length;
+        cycle();
+      }, 8000);
+    };
+    cycle();
+    return () => settle();
+  });
+}
+
+function initializeInferenceExample() {
+  const flow = document.getElementById("compute-flow");
+  const output = document.getElementById("compute-answer");
+  const requestState = document.getElementById("request-state");
+  const modelState = document.getElementById("model-state");
+  const status = document.getElementById("inference-status");
+  const steps = [...flow.querySelectorAll("[data-compute-step]")];
+  const answer = output.textContent.replace(/\s+/g, " ").trim();
+  const activate = (step) => {
+    steps.forEach((item) => {
+      item.classList.toggle("is-active", item.dataset.computeStep === step);
+    });
+  };
+  const finish = () => {
+    activate(null);
+    output.textContent = answer;
+    modelState.textContent = "Model kept in memory for follow-ups";
+    status.textContent =
+      "Example complete. Illustrated playback, not live inference.";
+    flow.setAttribute("aria-busy", "false");
+  };
+  autoplayWhileVisible(document.getElementById("inference-demo"), (later) => {
+    const cycle = () => {
+      flow.setAttribute("aria-busy", "true");
+      requestState.textContent = "Request sent to the Studio";
+      modelState.textContent = "Model weights already loaded";
+      status.textContent =
+        "Illustrative playback: a resident model answers a request.";
+      output.textContent = "";
+      activate("request");
+      later(() => {
+        activate("model");
+        modelState.textContent = "Processing the prompt with MLX";
+      }, 650);
+      later(() => {
+        activate("answer");
+        modelState.textContent = "Streaming the generated answer";
+        let position = 0;
+        const write = () => {
+          position += 2;
+          output.textContent = answer.slice(0, position);
+          if (position < answer.length) later(write, 30);
+          else {
+            finish();
+            later(cycle, 3500);
+          }
+        };
+        write();
+      }, 1300);
+    };
+    cycle();
+    return finish;
   });
 }
 
@@ -184,5 +417,7 @@ initializeIcons();
 initializeRepositoryLinks();
 initializeMobileNavigation();
 initializeTabs();
+initializeWorkflow();
+initializeInferenceExample();
 initializeCopyButtons();
 initializeRelease();
