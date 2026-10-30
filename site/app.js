@@ -179,6 +179,74 @@ function initializeWorkflow() {
   });
 }
 
+function initializeInferenceExample() {
+  const button = document.getElementById("run-inference");
+  const flow = document.getElementById("compute-flow");
+  const output = document.getElementById("compute-answer");
+  const requestState = document.getElementById("request-state");
+  const modelState = document.getElementById("model-state");
+  const status = document.getElementById("inference-status");
+  const steps = [...flow.querySelectorAll("[data-compute-step]")];
+  const answer = output.textContent.replace(/\s+/g, " ").trim();
+  const timers = new Set();
+  const later = (action, delay) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      action();
+    }, delay);
+    timers.add(timer);
+  };
+  const activate = (step) => {
+    steps.forEach((item) => {
+      item.classList.toggle("is-active", item.dataset.computeStep === step);
+    });
+  };
+  const finish = () => {
+    activate(null);
+    output.textContent = answer;
+    modelState.textContent = "Model kept in memory for follow-ups";
+    status.textContent =
+      "Example complete. Illustrated playback, not live inference.";
+    flow.setAttribute("aria-busy", "false");
+    button.disabled = false;
+    button.querySelector("span").textContent = "Replay example";
+  };
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    button.querySelector("span").textContent = "Playing example";
+    flow.setAttribute("aria-busy", "true");
+    requestState.textContent = "Request sent to the Studio";
+    modelState.textContent = "Model weights already loaded";
+    status.textContent =
+      "Illustrative playback: sending a request to a resident local model.";
+    output.textContent = "";
+    activate("request");
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
+    }
+    later(() => {
+      activate("model");
+      modelState.textContent = "Processing the prompt with MLX";
+    }, 650);
+    later(() => {
+      activate("answer");
+      modelState.textContent = "Streaming the generated answer";
+      let position = 0;
+      const write = () => {
+        position += 2;
+        output.textContent = answer.slice(0, position);
+        if (position < answer.length) later(write, 30);
+        else finish();
+      };
+      write();
+    }, 1300);
+  });
+  window.addEventListener("pagehide", () => timers.forEach(clearTimeout), {
+    once: true,
+  });
+}
+
 function initializeCopyButtons() {
   document.querySelectorAll(".copy-button").forEach((button) => {
     const label = button.getAttribute("aria-label");
@@ -276,5 +344,6 @@ initializeRepositoryLinks();
 initializeMobileNavigation();
 initializeTabs();
 initializeWorkflow();
+initializeInferenceExample();
 initializeCopyButtons();
 initializeRelease();
