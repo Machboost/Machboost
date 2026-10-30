@@ -5,38 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Local AI, on your terms. Chat, code, and share resident MLX models across your Macs with MachBoost. Free, open source, and built for Apple Silicon."
+      content="A home for local AI on your Mac. Chat, code, connect your tools, and share resident models with your team. Free community preview for Apple Silicon."
     />
-    <meta name="theme-color" content="#f7f9f7" />
+    <meta name="theme-color" content="#f6f9f7" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="MachBoost | Local AI, on your terms." />
+    <meta property="og:title" content="MachBoost | A home for your local AI." />
     <meta
       property="og:description"
-      content="Your models. Your machines. One place to chat, code, and connect your team."
+      content="Your models. Your machines. A little more possibility."
     />
     <meta
       property="og:image"
-      content="__MACHBOOST_SITE_URL__/assets/machboost-network.webp"
+      content="__MACHBOOST_SITE_URL__/assets/machboost-terrace.webp"
     />
     <meta property="og:url" content="__MACHBOOST_SITE_URL__/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <title>MachBoost | Local AI, on your terms.</title>
+    <link rel="canonical" href="__MACHBOOST_SITE_URL__/" />
+    <title>MachBoost | A home for your local AI.</title>
     <link rel="icon" href="assets/machboost-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/machboost-icon.png" />
     <link
       rel="preload"
-      href="assets/machboost-network.webp"
+      href="assets/machboost-terrace.webp"
       as="image"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="styles.css?v=20260906" />
+    <link
+      rel="preload"
+      href="assets/geist-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="styles.css?v=20261030" />
     <script defer src="assets/lucide.min.js"></script>
-    <script defer src="app.js?v=20260906"></script>
+    <script defer src="app.js?v=20261030"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
-      <nav class="nav shell" aria-label="Main navigation">
+      <nav class="nav" aria-label="Main navigation">
         <a class="brand" href="#top" aria-label="MachBoost home"
           ><img
             src="assets/machboost-mark.svg"
@@ -52,15 +60,17 @@
         </div>
         <div class="nav-actions">
           <a
-            class="icon-link"
-            href="https://github.com/__MACHBOOST_REPOSITORY__"
+            class="icon-button github-link"
+            href="https://github.com/Machboost/Machboost"
             data-repository-path=""
             aria-label="MachBoost on GitHub"
-            title="GitHub"
-            ><i data-lucide="github"></i></a
-          ><a class="button button-dark nav-download" href="#install"
-            >Get MachBoost <i data-lucide="arrow-down"></i></a
-          ><button
+            title="View source on GitHub"
+            ><i data-lucide="github"></i
+          ></a>
+          <a class="button button-small button-ink" href="#install"
+            >Get MachBoost <i data-lucide="arrow-up-right"></i
+          ></a>
+          <button
             class="mobile-menu icon-button"
             type="button"
             aria-label="Open navigation"
@@ -73,7 +83,7 @@
       </nav>
       <nav
         id="mobile-nav"
-        class="mobile-nav shell"
+        class="mobile-nav"
         aria-label="Mobile navigation"
         hidden
       >
@@ -85,356 +95,434 @@
     <main id="main">
       <section id="top" class="hero" aria-labelledby="hero-title">
         <img
-          class="hero-image"
-          src="assets/machboost-network.webp"
-          alt="Silver desktop computer and laptops connected by a green cable. Hardware illustration."
+          class="hero-art"
+          src="assets/machboost-terrace.webp"
+          alt="Painted lakeside terrace with a desktop Mac and two laptops connected by a green cable. An illustration of separate networked machines."
           width="1536"
           height="1024"
           fetchpriority="high"
         />
-        <div class="hero-content shell">
-          <a
-            class="release-pill"
-            href="https://github.com/__MACHBOOST_REPOSITORY__/releases/latest"
-            data-repository-path="/releases/latest"
-            ><span class="status-dot"></span
-            ><span>Open source. Open possibilities.</span
-            ><i data-lucide="arrow-up-right"></i
-          ></a>
-          <h1 id="hero-title">MachBoost<span class="title-period">.</span></h1>
-          <p class="hero-tagline">Local AI, on your terms.</p>
+        <div class="hero-content">
+          <p class="eyebrow hero-eyebrow">
+            <span class="status-dot"></span> A little less cloud. A lot more
+            yours.
+          </p>
+          <h1 id="hero-title">MachBoost<span>.</span></h1>
+          <p class="hero-tagline">Your AI, <em>right at home.</em></p>
           <p class="hero-copy">
-            Chat with your models. Code in your workspace.<br
-              class="desktop-break"
-            />
-            Put your team's Macs to work, together.
+            A home for local models on your Mac.<br />Chat, code, and put your
+            team's compute to work.
           </p>
           <div class="hero-actions">
             <a
-              id="download-button"
-              class="button button-green"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/releases/latest"
+              class="button button-ink"
+              href="https://github.com/Machboost/Machboost/releases/latest"
               data-repository-path="/releases/latest"
               data-download
-              ><i data-lucide="download"></i>Download for Mac</a
-            ><a class="button button-outline" href="#developers"
-              ><i data-lucide="terminal"></i>Start in your terminal</a
-            >
+              ><i data-lucide="apple"></i> Download for Mac
+              <i data-lucide="arrow-down"></i></a
+            ><a class="hero-secondary" href="#workflow"
+              >See it in action <i data-lucide="arrow-down-right"></i
+            ></a>
           </div>
           <p class="hero-meta">
-            Apple Silicon <span>·</span> macOS 14+ <span>·</span> Free community
-            preview
+            Free community preview <span>·</span> Apple Silicon
+            <span>·</span> macOS 14+
           </p>
         </div>
-        <div class="hero-foot shell">
-          <span><i data-lucide="cpu"></i> Powered by native MLX</span
-          ><span><i data-lucide="lock-keyhole"></i> Runs on your hardware</span
-          ><a href="#product" aria-label="Explore the MachBoost app"
-            ><i data-lucide="arrow-down"></i
-          ></a>
+        <div class="hero-caption">
+          <span>FIG. 01 / YOUR OWN LITTLE AI NETWORK</span
+          ><span>Models run on your hardware.</span>
         </div>
       </section>
-      <section class="compatibility" aria-label="Supported interfaces">
+
+      <section class="compatibility" aria-label="Supported workflows">
         <div class="shell compatibility-inner">
-          <p>Your workflow.<br /><strong>Already invited.</strong></p>
-          <span><i data-lucide="message-square-code"></i>ChatGPT + Codex</span
-          ><span><i data-lucide="message-circle"></i>Claude preview</span
-          ><span><i data-lucide="braces"></i>OpenAI API</span
-          ><span><i data-lucide="plug"></i>Ollama API</span>
+          <span class="compatibility-label"
+            >A new home.<br /><strong>Familiar company.</strong></span
+          ><span
+            ><i data-lucide="message-square-code"></i> ChatGPT &amp; Codex</span
+          ><span><i data-lucide="message-circle"></i> Claude preview</span
+          ><span><i data-lucide="braces"></i> OpenAI API</span
+          ><span><i data-lucide="plug"></i> Ollama API</span>
         </div>
       </section>
-      <section id="product" class="section product-section">
+
+      <section id="workflow" class="section workflow-section">
         <div class="shell">
-          <div class="section-heading">
-            <p class="eyebrow">01 / A home for your models</p>
-            <h2>From a quick question<br />to your next commit.</h2>
+          <div class="section-intro">
+            <p class="eyebrow">THE EVERYDAY, WITH A LITTLE MORE COMPUTE</p>
+            <h2>One place to <em>make it happen.</em></h2>
             <p>
-              A native Mac app for the way you actually work. Download a
-              compatible model, open a conversation, and go.
-            </p>
-          </div>
-          <div class="product-layout">
-            <figure class="product-screen">
-              <a
-                href="assets/machboost-coding.webp"
-                target="_blank"
-                rel="noopener"
-                aria-label="Open full-size MachBoost app preview"
-              >
-                <img
-                  src="assets/machboost-coding.webp"
-                  alt="MachBoost 0.16.17 with a Muse Glimmer model, reasoning and repository tool timeline, reviewed code changes, and the composer effort selector. Sample data from a UI test."
-                  width="2360"
-                  height="1560"
-                  loading="lazy"
-                />
-              </a>
-              <figcaption>
-                <span class="status-dot"></span>Native macOS app
-                <span class="caption-note">0.16.17 · sample workspace</span>
-              </figcaption>
-            </figure>
-            <div class="product-features">
-              <article>
-                <span class="feature-icon"
-                  ><i data-lucide="messages-square"></i
-                ></span>
-                <h3>A conversation that stays with you.</h3>
-                <p>
-                  Streaming Markdown, reasoning controls, saved chats, and files
-                  that stay attached across follow-ups.
-                </p>
-              </article>
-              <article>
-                <span class="feature-icon coral"
-                  ><i data-lucide="folder-code"></i
-                ></span>
-                <h3>Give your model a workspace.</h3>
-                <p>
-                  Read code, review tool calls, and inspect changes. Dev mode
-                  puts repository access and edit permissions within reach.
-                </p>
-              </article>
-              <article>
-                <span class="feature-icon violet"
-                  ><i data-lucide="puzzle"></i
-                ></span>
-                <h3>Bring a few more skills.</h3>
-                <p>
-                  Connect MCP tools and custom instructions. Use text or vision
-                  models with capabilities checked before download.
-                </p>
-              </article>
-              <a
-                class="text-link"
-                href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/apps/macos/README.md"
-                data-repository-path="/blob/main/apps/macos/README.md"
-                >Explore the desktop guide <i data-lucide="arrow-up-right"></i
-              ></a>
-            </div>
-          </div>
-          <div class="principles">
-            <span><i data-lucide="hard-drive"></i>Local chat history</span
-            ><span><i data-lucide="package-check"></i>Bundled Python + MLX</span
-            ><span><i data-lucide="scan-eye"></i>Compatible vision models</span
-            ><span><i data-lucide="radio"></i>No telemetry uploads</span>
-          </div>
-        </div>
-      </section>
-      <section id="team" class="section team-section">
-        <div class="shell">
-          <div class="team-heading">
-            <div>
-              <p class="eyebrow">02 / Better, together</p>
-              <h2>One powerful Mac.<br />A whole team of possibilities.</h2>
-            </div>
-            <p>
-              Your teammates don't all need a Mac Studio. Connect to a shared
-              host from MachBoost or point a compatible coding tool at its API.
+              A question, a code change, or a model for the whole team.<br
+                class="desktop-break"
+              />
+              Start where you are. Keep your own workflow.
             </p>
           </div>
           <div
-            class="network"
-            aria-label="Example: developer devices send inference to an authenticated Mac host. Repository tools run on the client."
+            class="workflow-demo"
+            aria-label="Illustrative MachBoost workflow"
           >
-            <div class="network-clients">
-              <div class="network-device">
-                <i data-lucide="laptop"></i><strong>Design MacBook</strong
-                ><span>MachBoost app</span>
-              </div>
-              <div class="network-device">
-                <i data-lucide="laptop"></i><strong>Engineering MacBook</strong
-                ><span>Claude Code</span>
-              </div>
-              <div class="network-device">
-                <i data-lucide="monitor"></i><strong>Team workstation</strong
-                ><span>OpenAI-compatible client</span>
-              </div>
-            </div>
-            <div class="network-bus">
+            <div class="demo-bar">
               <span
-                ><i data-lucide="key-round"></i>Authenticated private
-                network</span
-              >
-            </div>
-            <div class="network-hosts">
-              <div class="network-host">
-                <img
+                ><img
                   src="assets/machboost-mark.svg"
                   alt=""
-                  width="44"
-                  height="44"
+                  width="20"
+                  height="20"
                 />
-                <div>
-                  <span class="host-label">Primary host</span
-                  ><strong>Studio</strong><span>Resident MLX models</span>
+                MachBoost <span class="demo-divider">/</span> Fieldnotes</span
+              ><span class="example-label">INTERACTIVE EXAMPLE</span>
+            </div>
+            <div
+              class="workflow-tabs"
+              role="tablist"
+              aria-label="Explore a MachBoost workflow"
+            >
+              <button
+                id="workflow-chat"
+                role="tab"
+                aria-controls="workflow-panel"
+                aria-selected="true"
+                data-workflow="chat"
+                type="button"
+              >
+                <i data-lucide="messages-square"></i><span>Just ask</span
+                ><span class="tab-number">01</span>
+              </button>
+              <button
+                id="workflow-code"
+                role="tab"
+                aria-controls="workflow-panel"
+                aria-selected="false"
+                data-workflow="code"
+                tabindex="-1"
+                type="button"
+              >
+                <i data-lucide="folder-code"></i><span>Make a change</span
+                ><span class="tab-number">02</span>
+              </button>
+              <button
+                id="workflow-team"
+                role="tab"
+                aria-controls="workflow-panel"
+                aria-selected="false"
+                data-workflow="team"
+                tabindex="-1"
+                type="button"
+              >
+                <i data-lucide="network"></i><span>Share the compute</span
+                ><span class="tab-number">03</span>
+              </button>
+            </div>
+            <div
+              id="workflow-panel"
+              class="workflow-panel"
+              role="tabpanel"
+              aria-labelledby="workflow-chat"
+              tabindex="0"
+            >
+              <div class="demo-conversation">
+                <div class="demo-user">
+                  <span class="avatar">You</span>
+                  <p id="demo-question">
+                    What should I know before the next release?
+                  </p>
                 </div>
-                <span class="host-badge"
-                  ><span class="status-dot"></span>Shared inference</span
+                <div class="demo-answer">
+                  <img
+                    src="assets/machboost-mark.svg"
+                    width="25"
+                    height="25"
+                    alt="MachBoost"
+                  />
+                  <div>
+                    <p id="demo-answer">
+                      The release notes mention three changes: a new search
+                      endpoint, stricter input validation, and an updated client
+                      SDK.
+                    </p>
+                    <div id="demo-activity" class="demo-activity">
+                      <i data-lucide="file-text"></i
+                      ><span>Context: release-notes.md</span
+                      ><span class="demo-check"
+                        ><i data-lucide="check"></i
+                      ></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="demo-input">
+                  <span id="demo-input-text">Ask a follow-up...</span
+                  ><i data-lucide="arrow-up"></i>
+                </div>
+              </div>
+              <aside class="demo-explanation">
+                <span class="eyebrow" id="demo-label"
+                  >YOUR MODEL. YOUR CONTEXT.</span
                 >
-              </div>
-              <div class="network-fallback">
-                <i data-lucide="git-branch"></i>
-                <div>
-                  <strong>Another available Mac</strong>
-                  <p>Optional compatible host or local fallback</p>
-                </div>
-              </div>
+                <h3 id="demo-title">Pick up the conversation.</h3>
+                <p id="demo-description">
+                  Keep files attached across follow-ups and your model resident
+                  between requests. Your next question doesn't have to start
+                  over.
+                </p>
+                <a id="demo-link" class="text-link" href="#product"
+                  >Meet the app <i data-lucide="arrow-up-right"></i
+                ></a>
+              </aside>
+            </div>
+            <div class="demo-foot">
+              <span
+                ><span class="status-dot"></span> Illustration of the
+                workflow</span
+              ><span>Sample responses, not live inference</span>
             </div>
           </div>
-          <div class="team-details">
+        </div>
+      </section>
+
+      <section id="product" class="section product-section">
+        <div class="shell">
+          <div class="section-intro">
+            <p class="eyebrow">A PROPER HOME FOR YOUR MODELS</p>
+            <h2>From “hey” to<br /><em>“here's the diff.”</em></h2>
+            <p>
+              A native Mac app for conversations that become work.<br
+                class="desktop-break"
+              />
+              Bring your files, your repository, and a model you choose.
+            </p>
+          </div>
+          <figure class="product-screen">
+            <a
+              href="assets/machboost-coding.webp"
+              target="_blank"
+              rel="noopener"
+              aria-label="Open full-size MachBoost coding app preview"
+              ><img
+                src="assets/machboost-coding.webp"
+                alt="MachBoost app with Muse Glimmer, repository tool calls, a code diff, and reasoning controls. Sample workspace from a UI test, captured September 6, 2026."
+                width="2360"
+                height="1560"
+                loading="lazy"
+            /></a>
+            <figcaption>
+              <span>FIG. 02 / THE WORK, IN ONE WINDOW</span
+              ><span>App preview · sample workspace · September 2026</span>
+            </figcaption>
+          </figure>
+          <div class="feature-columns">
             <article>
-              <span>01</span>
-              <h3>Keep models ready.</h3>
+              <span class="feature-index">01 / CONVERSATION</span>
+              <h3>A little more than chat.</h3>
               <p>
-                Resident models, bounded queues, and employee limits keep a
-                shared server manageable.
+                Streaming answers, Markdown, reasoning controls, and saved
+                conversations. Keep text files and images close at hand.
               </p>
             </article>
             <article>
-              <span>02</span>
-              <h3>Choose where work runs.</h3>
+              <span class="feature-index">02 / WORKSPACE</span>
+              <h3>Context meets action.</h3>
               <p>
-                The desktop app can prefer a device or choose a compatible host
-                using residency and queue pressure.
+                Give a compatible model repository tools. Follow its calls,
+                choose edit permissions, and inspect the changes it makes.
               </p>
             </article>
             <article>
-              <span>03</span>
-              <h3>Keep access deliberate.</h3>
+              <span class="feature-index">03 / EXTENSIONS</span>
+              <h3>Your tools are welcome.</h3>
               <p>
-                Scoped keys for teammates. Repository tools stay on the client.
-                Paid API fallback is an explicit choice.
+                Connect MCP servers and add custom instructions. Model
+                capabilities are checked before you download.
               </p>
             </article>
           </div>
-          <div class="team-note">
-            <p>
-              Routing happens before generation; an active stream stays on its
-              host. Generic API clients use the endpoint they target. Memory
-              isn't pooled across devices.
-            </p>
-            <a
+          <div class="product-note">
+            <span><i data-lucide="hard-drive"></i> Local chat history</span
+            ><span><i data-lucide="cpu"></i> Bundled Python + MLX</span
+            ><span><i data-lucide="scan-eye"></i> Compatible vision models</span
+            ><a
               class="text-link"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/docs/TEAM_GATEWAY.md"
-              data-repository-path="/blob/main/docs/TEAM_GATEWAY.md"
-              >Set up your team <i data-lucide="arrow-up-right"></i
+              href="https://github.com/Machboost/Machboost/blob/main/apps/macos/README.md"
+              data-repository-path="/blob/main/apps/macos/README.md"
+              >Desktop guide <i data-lucide="arrow-up-right"></i
             ></a>
           </div>
         </div>
       </section>
+
+      <section id="team" class="section team-section">
+        <div class="shell">
+          <div class="team-heading">
+            <div>
+              <p class="eyebrow">GOOD COMPUTE DESERVES GOOD COMPANY</p>
+              <h2>One powerful Mac.<br /><em>A whole team's AI.</em></h2>
+            </div>
+            <p>
+              Your teammates don't all need a workstation. Share a resident
+              model from one Mac, then connect through MachBoost or a compatible
+              coding tool.
+            </p>
+          </div>
+          <div
+            class="network"
+            aria-label="Example: clients send authenticated inference to a shared Mac. Repository tools run on the client."
+          >
+            <div class="network-clients">
+              <div>
+                <i data-lucide="laptop"></i><strong>Design's MacBook</strong
+                ><span>MachBoost app</span>
+              </div>
+              <div>
+                <i data-lucide="laptop"></i><strong>Engineering's laptop</strong
+                ><span>Compatible coding tool</span>
+              </div>
+              <div>
+                <i data-lucide="monitor"></i><strong>Your workstation</strong
+                ><span>OpenAI-compatible client</span>
+              </div>
+            </div>
+            <div class="network-connection">
+              <span
+                ><i data-lucide="key-round"></i> Your private network ·
+                authenticated requests</span
+              ><i data-lucide="arrow-down"></i>
+            </div>
+            <div class="network-server">
+              <div class="server-emblem">
+                <img
+                  src="assets/machboost-mark.svg"
+                  alt=""
+                  width="36"
+                  height="36"
+                />
+              </div>
+              <div>
+                <span class="eyebrow">SHARED HOST</span><strong>Studio</strong
+                ><span>Resident models. A bounded request queue.</span>
+              </div>
+              <span class="server-status"
+                ><span class="status-dot"></span> Ready to serve</span
+              >
+            </div>
+            <p class="network-caption">
+              Illustrative setup. Choose a preferred device or let the app rank
+              compatible saved hosts.
+            </p>
+          </div>
+          <div class="team-bottom">
+            <p>
+              Routing happens before generation. Each stream stays on its host;
+              device memory isn't pooled. Repository tools run on the client.
+              Paid API fallback is optional and explicitly configured.
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/Machboost/Machboost/blob/main/docs/TEAM_GATEWAY.md"
+              data-repository-path="/blob/main/docs/TEAM_GATEWAY.md"
+              >Set up a shared host <i data-lucide="arrow-up-right"></i
+            ></a>
+          </div>
+        </div>
+      </section>
+
       <section id="benchmarks" class="section benchmark-section">
         <div class="shell">
-          <div class="section-heading">
-            <p class="eyebrow">03 / Less repeated work</p>
-            <h2>
-              Let the model think.<br /><span class="muted-heading"
-                >Skip what it already knows.</span
-              >
-            </h2>
+          <div class="section-intro">
+            <p class="eyebrow">LESS REPEATING. MORE GETTING SOMEWHERE.</p>
+            <h2>Some work deserves<br /><em>to be done once.</em></h2>
             <p>
-              Exact reusable context can avoid expensive prompt processing.
-              Here's where that made a measured difference.
+              Reusable context can save the model from processing the same input
+              again.<br class="desktop-break" />
+              Here's a recorded example, with the conditions left in.
             </p>
           </div>
           <div class="benchmark-layout">
             <div class="benchmark-result">
-              <span class="metric-label">Repository-prefix reuse</span>
+              <span class="eyebrow">REPOSITORY-PREFIX REUSE</span>
               <div class="large-metric">2.89<span>×</span></div>
               <p>median paired speedup</p>
               <span class="verified"
-                ><i data-lucide="check-check"></i>10 / 10 token-identical
+                ><i data-lucide="check-check"></i> 10 / 10 token-identical
                 pairs</span
               >
             </div>
             <div class="benchmark-chart">
               <div class="chart-heading">
                 <h3>Same model. Same weights. Same prompts.</h3>
-                <span>Lower time is better</span>
+                <span>Lower wall time is better</span>
               </div>
               <div class="bar-row">
                 <div>
                   <span>Native MLX · cache off</span><strong>3.501 s</strong>
                 </div>
-                <div class="bar-track">
-                  <div class="bar baseline" style="--bar-width: 100%"></div>
-                </div>
+                <div class="bar-track"><div class="bar baseline"></div></div>
               </div>
               <div class="bar-row">
                 <div>
-                  <span
-                    ><img
-                      src="assets/machboost-mark.svg"
-                      width="18"
-                      height="18"
-                      alt=""
-                    />MachBoost · prefix reuse</span
-                  ><strong>1.186 s</strong>
+                  <span>MachBoost · prefix reuse</span><strong>1.186 s</strong>
                 </div>
-                <div class="bar-track">
-                  <div
-                    class="bar accelerated"
-                    style="--bar-width: 33.88%"
-                  ></div>
-                </div>
+                <div class="bar-track"><div class="bar accelerated"></div></div>
               </div>
               <p class="chart-note">
-                Qwen2.5 3B · 4-bit · Apple M5 Pro · 48 GB memory<br />10
-                repository questions · greedy generation · up to 48 output
-                tokens<br />Recorded August 15, 2026 on MachBoost 0.11.0. Bars
-                show medians; 2.89× is the median of paired ratios.
+                Qwen2.5 3B · 4-bit · Apple M5 Pro · 48 GB<br />10 repository
+                questions · greedy decoding · up to 48 output tokens<br />August
+                15, 2026 · MachBoost 0.11.0. Bars show medians; 2.89× is the
+                median of paired ratios.
               </p>
             </div>
           </div>
           <div class="benchmark-boundary">
             <i data-lucide="info"></i>
             <p>
-              This measures repeated repository context, not faster token
-              decoding. A first question, a new image, or entirely new context
-              may get little or no speedup. These are historical results, not a
-              performance guarantee for every model or this release.
+              This is a historical repeated-context result, not a promise of
+              faster generation everywhere. First questions and new context may
+              get little or no speedup. A later Gemma/Muse audit found output
+              differences on cached follow-ups; cache behavior depends on the
+              model and runtime.
             </p>
           </div>
           <div class="evidence-links">
             <a
-              href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/results/native_workspace_team_qwen25_3b_20260815.json"
+              href="https://github.com/Machboost/Machboost/blob/main/results/native_workspace_team_qwen25_3b_20260815.json"
               data-repository-path="/blob/main/results/native_workspace_team_qwen25_3b_20260815.json"
-              >Read the recorded results <i data-lucide="arrow-up-right"></i></a
+              >Recorded results <i data-lucide="arrow-up-right"></i></a
             ><a
-              href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/scripts/benchmark_workspace_prefix.py"
+              href="https://github.com/Machboost/Machboost/blob/main/docs/latency-audit-20260921.md"
+              data-repository-path="/blob/main/docs/latency-audit-20260921.md"
+              >Latency audit <i data-lucide="arrow-up-right"></i></a
+            ><a
+              href="https://github.com/Machboost/Machboost/blob/main/scripts/benchmark_workspace_prefix.py"
               data-repository-path="/blob/main/scripts/benchmark_workspace_prefix.py"
-              >Run the benchmark <i data-lucide="arrow-up-right"></i></a
-            ><a
-              href="https://github.com/__MACHBOOST_REPOSITORY__/tree/main/results"
-              data-repository-path="/tree/main/results"
-              >All experiments, including limitations
-              <i data-lucide="arrow-up-right"></i
+              >Run the benchmark <i data-lucide="arrow-up-right"></i
             ></a>
           </div>
         </div>
       </section>
+
       <section id="developers" class="section developer-section">
         <div class="shell developer-layout">
-          <div class="developer-copy">
-            <p class="eyebrow">04 / Bring your own workflow</p>
-            <h2>Familiar commands.<br />Your own compute.</h2>
+          <div>
+            <p class="eyebrow">YOUR WORKFLOW, ALREADY INVITED</p>
+            <h2>Familiar commands.<br /><em>Your own compute.</em></h2>
             <p>
-              Start in the terminal, connect ChatGPT or Codex, or build on the
-              same API that powers the app.
+              Use the terminal, connect a coding client, or build on the same
+              resident server that powers the app.
             </p>
             <ul class="protocol-list">
               <li>
-                <i data-lucide="check"></i>OpenAI Chat Completions &amp;
+                <i data-lucide="check"></i> OpenAI Chat Completions &amp;
                 Responses
               </li>
-              <li><i data-lucide="check"></i>Anthropic Messages</li>
-              <li><i data-lucide="check"></i>Ollama-compatible endpoints</li>
+              <li><i data-lucide="check"></i> Anthropic Messages</li>
+              <li><i data-lucide="check"></i> Ollama-compatible endpoints</li>
             </ul>
             <a
               class="text-link"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/tree/main/examples/python"
+              href="https://github.com/Machboost/Machboost/tree/main/examples/python"
               data-repository-path="/tree/main/examples/python"
-              >Browse runnable examples <i data-lucide="arrow-up-right"></i
+              >Runnable examples <i data-lucide="arrow-up-right"></i
             ></a>
           </div>
           <div class="code-workbench">
@@ -444,41 +532,115 @@
               aria-label="Connection examples"
             >
               <button
-                role="tab"
                 id="tab-terminal"
+                role="tab"
                 aria-controls="panel-terminal"
                 aria-selected="true"
                 type="button"
               >
-                <i data-lucide="terminal"></i>Terminal</button
+                <i data-lucide="terminal"></i> Terminal</button
               ><button
-                role="tab"
                 id="tab-python"
+                role="tab"
                 aria-controls="panel-python"
                 aria-selected="false"
                 tabindex="-1"
                 type="button"
               >
-                <i data-lucide="code-2"></i>Python</button
+                <i data-lucide="code-2"></i> Python</button
               ><button
-                role="tab"
                 id="tab-codex"
+                role="tab"
                 aria-controls="panel-codex"
                 aria-selected="false"
                 tabindex="-1"
                 type="button"
               >
-                <i data-lucide="square-terminal"></i>Codex</button
+                Codex</button
               ><button
-                role="tab"
                 id="tab-claude"
+                role="tab"
                 aria-controls="panel-claude"
                 aria-selected="false"
                 tabindex="-1"
                 type="button"
               >
-                <i data-lucide="message-circle"></i>Claude
+                Claude
               </button>
+            </div>
+            <div
+              id="panel-terminal"
+              class="code-panel"
+              role="tabpanel"
+              aria-labelledby="tab-terminal"
+              tabindex="0"
+            >
+              <div class="code-toolbar">
+                <span>zsh / install &amp; run</span
+                ><button
+                  class="copy-button icon-button"
+                  data-copy-target="terminal-code"
+                  type="button"
+                  aria-label="Copy terminal commands"
+                  title="Copy terminal commands"
+                >
+                  <i data-lucide="copy"></i>
+                </button>
+              </div>
+              <pre><code id="terminal-code"><span class="code-comment"># Install with the native MLX backend</span>
+python3 -m pip install --upgrade "machboost[mlx]"
+
+<span class="code-comment"># Download a model and start a conversation</span>
+machboost pull qwen2.5:3b
+machboost run qwen2.5:3b
+
+<span class="code-comment"># Start the API server</span>
+machboost serve</code></pre>
+              <p class="code-footnote">
+                The Mac app includes its runtime. This CLI install uses your
+                Python environment.
+              </p>
+            </div>
+            <div
+              id="panel-python"
+              class="code-panel"
+              role="tabpanel"
+              aria-labelledby="tab-python"
+              tabindex="0"
+              hidden
+            >
+              <div class="code-toolbar">
+                <span>Python / OpenAI SDK</span
+                ><button
+                  class="copy-button icon-button"
+                  data-copy-target="python-code"
+                  type="button"
+                  aria-label="Copy Python example"
+                  title="Copy Python example"
+                >
+                  <i data-lucide="copy"></i>
+                </button>
+              </div>
+              <pre><code id="python-code">import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:11435/v1",
+    api_key=os.environ["MACHBOOST_API_KEY"],
+)
+
+for chunk in client.chat.completions.create(
+    model="qwen2.5:3b",
+    messages=[{"role": "user", "content": "Hello!"}],
+    stream=True,
+):
+    if chunk.choices:
+        print(chunk.choices[0].delta.content or "",
+              end="", flush=True)</code></pre>
+              <p class="code-footnote">
+                Install the OpenAI SDK, load the model, and set your host's key.
+                Use its LAN endpoint for a shared Mac.
+              </p>
             </div>
             <div
               id="panel-codex"
@@ -500,90 +662,17 @@
                   <i data-lucide="copy"></i>
                 </button>
               </div>
-              <pre><code id="codex-code"><span class="code-comment"># Add resident models to ChatGPT's Codex workspace</span>
+              <pre><code id="codex-code"><span class="code-comment"># Connect ChatGPT's Codex workspace</span>
 machboost launch chatgpt
 
-<span class="code-comment"># Launch Codex CLI through an isolated MachBoost profile</span>
+<span class="code-comment"># Launch Codex CLI with MachBoost</span>
 machboost launch codex
 
-<span class="code-comment"># Restore ChatGPT's previous provider</span>
+<span class="code-comment"># Restore the previous desktop provider</span>
 machboost launch chatgpt --restore</code></pre>
               <p class="code-footnote">
-                Uses the OpenAI Responses API. The Codex CLI profile stays
-                separate from your normal provider configuration.
-              </p>
-            </div>
-            <div
-              id="panel-terminal"
-              class="code-panel"
-              role="tabpanel"
-              aria-labelledby="tab-terminal"
-              tabindex="0"
-            >
-              <div class="code-toolbar">
-                <span>zsh</span
-                ><button
-                  class="copy-button icon-button"
-                  data-copy-target="terminal-code"
-                  type="button"
-                  aria-label="Copy terminal commands"
-                  title="Copy terminal commands"
-                >
-                  <i data-lucide="copy"></i>
-                </button>
-              </div>
-              <pre><code id="terminal-code"><span class="code-comment"># Install the native text backend</span>
-python3 -m pip install --upgrade <span class="code-string">"machboost[mlx]"</span>
-
-<span class="code-comment"># Download a model, then start chatting</span>
-machboost pull <span class="code-string">qwen2.5:3b</span>
-machboost run <span class="code-string">qwen2.5:3b</span>
-
-<span class="code-comment"># Run the API server</span>
-machboost serve</code></pre>
-              <p class="code-footnote">
-                The Mac app bundles its own runtime. The CLI example installs
-                into your Python environment.
-              </p>
-            </div>
-            <div
-              id="panel-python"
-              class="code-panel"
-              role="tabpanel"
-              aria-labelledby="tab-python"
-              tabindex="0"
-              hidden
-            >
-              <div class="code-toolbar">
-                <span>Python · OpenAI SDK</span
-                ><button
-                  class="copy-button icon-button"
-                  data-copy-target="python-code"
-                  type="button"
-                  aria-label="Copy Python example"
-                  title="Copy Python example"
-                >
-                  <i data-lucide="copy"></i>
-                </button>
-              </div>
-              <pre><code id="python-code"><span class="code-keyword">import</span> os
-<span class="code-keyword">from</span> openai <span class="code-keyword">import</span> OpenAI
-
-client = OpenAI(
-    base_url=<span class="code-string">"http://127.0.0.1:11435/v1"</span>,
-    api_key=os.environ[<span class="code-string">"MACHBOOST_API_KEY"</span>],
-)
-
-<span class="code-keyword">for</span> chunk <span class="code-keyword">in</span> client.chat.completions.create(
-    model=<span class="code-string">"qwen2.5:3b"</span>,
-    messages=[{<span class="code-string">"role"</span>: <span class="code-string">"user"</span>, <span class="code-string">"content"</span>: <span class="code-string">"Hello!"</span>}],
-    stream=<span class="code-keyword">True</span>,
-):
-    <span class="code-keyword">if</span> chunk.choices:
-        print(chunk.choices[0].delta.content <span class="code-keyword">or</span> <span class="code-string">""</span>, end=<span class="code-string">""</span>, flush=<span class="code-keyword">True</span>)</code></pre>
-              <p class="code-footnote">
-                Install the OpenAI SDK, load the model, and set your host's API
-                key. For another Mac, use its LAN endpoint.
+                Uses the Responses API. The CLI profile is separate from your
+                usual provider configuration.
               </p>
             </div>
             <div
@@ -595,7 +684,7 @@ client = OpenAI(
               hidden
             >
               <div class="code-toolbar">
-                <span>Claude Desktop gateway · preview</span
+                <span>Claude Desktop gateway / preview</span
                 ><button
                   class="copy-button icon-button"
                   data-copy-target="claude-code"
@@ -609,11 +698,10 @@ client = OpenAI(
               <pre><code id="claude-code"><span class="code-comment"># Connect Claude Desktop to this Mac</span>
 machboost launch claude-desktop
 
-<span class="code-comment"># Or choose a previously saved team host</span>
-machboost launch claude-desktop \
-    --connection <span class="code-string">studio</span>
+<span class="code-comment"># Or use a saved shared host</span>
+machboost launch claude-desktop --connection studio
 
-<span class="code-comment"># Restore your previous provider</span>
+<span class="code-comment"># Restore the previous provider</span>
 machboost launch claude-desktop --restore</code></pre>
               <p class="code-footnote">
                 Also available in the app's Apps view. Long Claude Code tool
@@ -623,16 +711,17 @@ machboost launch claude-desktop --restore</code></pre>
           </div>
         </div>
       </section>
-      <section class="section faq-section" id="questions">
+
+      <section id="questions" class="section faq-section">
         <div class="shell faq-layout">
           <div>
-            <p class="eyebrow">A few good questions</p>
-            <h2>Before you<br />make it yours.</h2>
+            <p class="eyebrow">BEFORE YOU MAKE YOURSELF AT HOME</p>
+            <h2>Good questions.<br /><em>Straight answers.</em></h2>
             <a
               class="text-link"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/issues"
+              href="https://github.com/Machboost/Machboost/issues"
               data-repository-path="/issues"
-              >Ask us on GitHub <i data-lucide="arrow-up-right"></i
+              >Ask on GitHub <i data-lucide="arrow-up-right"></i
             ></a>
           </div>
           <div class="faq-list">
@@ -641,11 +730,10 @@ machboost launch claude-desktop --restore</code></pre>
                 Is it faster for every prompt?<i data-lucide="plus"></i>
               </summary>
               <p>
-                No. MachBoost's strongest measured gains come from reusable
-                prefixes and repeated visual or repository context. Fresh,
-                open-ended questions may run at native backend speed. The
-                benchmark above compares the same model and weights, and names
-                the workload.
+                No. The strongest measured gains come from useful reusable
+                context. A fresh question may run at native backend speed, and
+                the server can add overhead. Benchmarks name the workload,
+                model, cache state, and limitations.
               </p>
             </details>
             <details>
@@ -653,35 +741,34 @@ machboost launch claude-desktop --restore</code></pre>
                 Do I need Ollama or Python?<i data-lucide="plus"></i>
               </summary>
               <p>
-                The Mac app includes its Python and MLX runtime, so neither a
-                separate Python install nor Ollama is needed for native models.
-                The standalone Python package and CLI require a compatible
-                Python installation and the appropriate backend extras.
+                The Mac app includes its Python and MLX runtime. No separate
+                Python installation or Ollama is needed for native models. The
+                standalone CLI requires Python and the matching backend extras.
               </p>
             </details>
             <details>
               <summary>
-                Can my teammates connect from another computer?<i
+                Can other computers use my Mac's models?<i
                   data-lucide="plus"
                 ></i>
               </summary>
               <p>
                 Yes. Enable authenticated LAN serving on the host, then connect
-                with its network address and a scoped API key. MachBoost's app
-                can use saved hosts; other compatible clients can use the host's
-                API endpoint. The native desktop app requires Apple Silicon,
-                while API clients can run on other platforms.
+                with its address and a scoped key. MachBoost clients can use
+                saved hosts; other tools can use a compatible API. Serving
+                shares inference, not the machines' GPU memory.
               </p>
             </details>
             <details>
               <summary>
-                Does every Hugging Face model work?<i data-lucide="plus"></i>
+                Which models and file types work?<i data-lucide="plus"></i>
               </summary>
               <p>
-                No. Desktop inference supports compatible MLX text and MLX-VLM
-                vision models. The app searches public Hugging Face repositories
-                and checks architecture support before download. Reasoning,
-                images, and tools depend on both the model and runtime support.
+                The desktop app supports compatible MLX text and MLX-VLM vision
+                repositories. Reasoning, tool calls, and visual inputs depend on
+                the model and backend. Attach plain text, source code, folders
+                of text/code, and supported images. Check model capabilities
+                before downloading.
               </p>
             </details>
             <details>
@@ -689,56 +776,53 @@ machboost launch claude-desktop --restore</code></pre>
                 Does anything leave my Mac?<i data-lucide="plus"></i>
               </summary>
               <p>
-                Local inference and chats stay on your Mac. Connecting to a host
-                or paid provider sends the selected request there; an MCP
-                connector follows its own service behavior. Model downloads and
-                update checks contact their providers. MachBoost does not upload
+                Local inference and chats stay on your Mac. Shared hosts and
+                paid-provider fallback receive requests you send to them. MCP
+                connectors follow their service behavior. Downloads and update
+                checks contact their providers. MachBoost does not upload
                 telemetry.
               </p>
             </details>
             <details>
               <summary>
-                Why does macOS ask me to approve the app?<i
-                  data-lucide="plus"
-                ></i>
+                Why does macOS block the first launch?<i data-lucide="plus"></i>
               </summary>
               <p>
-                The free community build is ad-hoc signed, but not
-                Apple-notarized. After the first blocked launch, open System
-                Settings → Privacy &amp; Security → Open Anyway. Verify the
-                release checksum first. Supported installations receive updates
-                through a signed Sparkle feed.
+                The community build is ad-hoc signed and isn't Apple-notarized.
+                After the first blocked launch, use System Settings → Privacy
+                &amp; Security → Open Anyway. Verify the release checksum first.
+                Supported installations use a signed Sparkle update feed.
               </p>
             </details>
           </div>
         </div>
       </section>
+
       <section id="install" class="install-section">
         <div class="shell">
-          <div class="install-heading">
-            <img
-              src="assets/machboost-mark.svg"
-              alt=""
-              width="60"
-              height="60"
-            />
-            <p class="eyebrow">Your next local setup</p>
-            <h2>Good models.<br />Great company. Your Mac.</h2>
-            <p>Free to use. Open to build on.</p>
-          </div>
+          <img
+            class="install-mark"
+            src="assets/machboost-mark.svg"
+            alt=""
+            width="52"
+            height="52"
+          />
+          <p class="eyebrow">MAKE A LITTLE ROOM FOR POSSIBILITY</p>
+          <h2>Your next idea.<br /><em>Your own machine.</em></h2>
+          <p>Download a model. Open a conversation. See where it goes.</p>
           <div class="install-actions">
             <a
-              id="install-download-button"
-              class="button button-dark"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/releases/latest"
+              class="button button-ink"
+              href="https://github.com/Machboost/Machboost/releases/latest"
               data-repository-path="/releases/latest"
               data-download
-              ><i data-lucide="download"></i>Download MachBoost</a
+              ><i data-lucide="apple"></i> Download for Mac
+              <i data-lucide="arrow-down"></i></a
             ><a
               class="button button-outline"
-              href="https://github.com/__MACHBOOST_REPOSITORY__"
+              href="https://github.com/Machboost/Machboost"
               data-repository-path=""
-              ><i data-lucide="github"></i>Explore the source</a
+              ><i data-lucide="github"></i> Explore the source</a
             >
           </div>
           <p id="release-status" class="release-status" aria-live="polite">
@@ -746,37 +830,35 @@ machboost launch claude-desktop --restore</code></pre>
           </p>
           <ol class="install-steps">
             <li>
-              <span>1</span>
+              <span>01</span>
               <div>
                 <strong>Download &amp; drag</strong>
                 <p>Open the DMG. Move MachBoost to Applications.</p>
               </div>
             </li>
             <li>
-              <span>2</span>
+              <span>02</span>
               <div>
                 <strong>Approve the first launch</strong>
                 <p>
-                  After macOS blocks it, use Privacy &amp; Security → Open
-                  Anyway.
+                  Privacy &amp; Security → Open Anyway, after macOS blocks it.
                 </p>
               </div>
             </li>
             <li>
-              <span>3</span>
+              <span>03</span>
               <div>
-                <strong>Make yourself at home</strong>
+                <strong>Find your model</strong>
                 <p>Download a compatible model or connect to a shared host.</p>
               </div>
             </li>
           </ol>
           <p class="install-disclosure">
-            Community preview, ad-hoc signed; not Apple-notarized.
-            <a
+            Free community preview. Ad-hoc signed; not Apple-notarized.<br /><a
               class="checksum-link"
-              href="https://github.com/__MACHBOOST_REPOSITORY__/releases/latest"
+              href="https://github.com/Machboost/Machboost/releases/latest"
               data-repository-path="/releases/latest"
-              >Release notes &amp; checksum <i data-lucide="arrow-up-right"></i
+              >Release notes &amp; checksums <i data-lucide="arrow-up-right"></i
             ></a>
           </p>
         </div>
@@ -784,29 +866,54 @@ machboost launch claude-desktop --restore</code></pre>
     </main>
     <footer class="site-footer">
       <div class="shell footer-top">
-        <a class="brand" href="#top"
-          ><img
-            src="assets/machboost-mark.svg"
-            width="30"
-            height="30"
-            alt=""
-          /><span>MachBoost</span></a
-        >
-        <p>A little less cloud. A lot more yours.</p>
         <div>
-          <a
-            href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/README.md"
-            data-repository-path="/blob/main/README.md"
-            >Docs</a
-          ><a
-            href="https://github.com/__MACHBOOST_REPOSITORY__/issues"
-            data-repository-path="/issues"
-            >Feedback</a
-          ><a
-            href="https://github.com/__MACHBOOST_REPOSITORY__/blob/main/LICENSE"
-            data-repository-path="/blob/main/LICENSE"
-            >MIT license</a
+          <a class="brand" href="#top"
+            ><img
+              src="assets/machboost-mark.svg"
+              width="30"
+              height="30"
+              alt=""
+            /><span>MachBoost</span></a
           >
+          <p>Your models. Your machines.<br />A little more possibility.</p>
+        </div>
+        <div class="footer-links">
+          <div>
+            <span>EXPLORE</span><a href="#product">The app</a
+            ><a href="#team">For teams</a><a href="#benchmarks">Performance</a>
+          </div>
+          <div>
+            <span>BUILD</span
+            ><a
+              href="https://github.com/Machboost/Machboost/blob/main/README.md"
+              data-repository-path="/blob/main/README.md"
+              >Documentation</a
+            ><a
+              href="https://github.com/Machboost/Machboost/tree/main/examples/python"
+              data-repository-path="/tree/main/examples/python"
+              >Examples</a
+            ><a
+              href="https://github.com/Machboost/Machboost/releases"
+              data-repository-path="/releases"
+              >Releases</a
+            >
+          </div>
+          <div>
+            <span>SAY HELLO</span
+            ><a
+              href="https://github.com/Machboost/Machboost"
+              data-repository-path=""
+              >GitHub</a
+            ><a
+              href="https://github.com/Machboost/Machboost/issues"
+              data-repository-path="/issues"
+              >Feedback &amp; issues</a
+            ><a
+              href="https://github.com/Machboost/Machboost/blob/main/LICENSE"
+              data-repository-path="/blob/main/LICENSE"
+              >MIT license</a
+            >
+          </div>
         </div>
       </div>
       <div class="shell footer-bottom">
