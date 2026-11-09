@@ -2,12 +2,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from machboost.providers import (
     ProviderBudgetError,
+    ProviderConfig,
     ProviderError,
     ProviderStore,
+    _default_transport,
     route_with_fallback,
 )
 
@@ -105,6 +107,30 @@ class ProviderStoreTests(unittest.TestCase):
         self.assertTrue(self.store.delete("primary"))
         self.assertFalse(self.store.delete("primary"))
         self.assertEqual(self.store.list(), [])
+
+
+class ProviderTransportTests(unittest.TestCase):
+    def test_root_and_versioned_base_urls_target_one_api_version(self):
+        for base, expected in [
+            ("https://api.example.com", "https://api.example.com/v1/chat/completions"),
+            ("https://api.example.com/", "https://api.example.com/v1/chat/completions"),
+            ("https://api.example.com/v1", "https://api.example.com/v1/chat/completions"),
+            ("https://api.example.com/v1/", "https://api.example.com/v1/chat/completions"),
+            ("https://api.example.com/openai/v1", "https://api.example.com/openai/v1/chat/completions"),
+            ("https://api.example.com/gateway", "https://api.example.com/gateway/v1/chat/completions"),
+        ]:
+            with self.subTest(base=base), patch("machboost.providers.urllib.request.urlopen") as opened:
+                response = MagicMock()
+                response.read.return_value = b'{"choices": []}'
+                opened.return_value.__enter__.return_value = response
+                config = ProviderConfig(id="meta", name="Meta", base_url=base, models=("muse-spark-1.3",))
+                self.assertEqual(
+                    _default_transport(config, "/chat/completions", {"model": "muse-spark-1.3"}, {"Authorization": "Bearer test"}),
+                    {"choices": []},
+                )
+                request = opened.call_args.args[0]
+                self.assertEqual(request.full_url, expected)
+                self.assertEqual(request.get_header("Authorization"), "Bearer test")
 
 
 class RouteFallbackTests(unittest.TestCase):
