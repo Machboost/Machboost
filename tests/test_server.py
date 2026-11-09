@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 from machboost.models import resolve_model
 from machboost.scheduler import RequestAdmissionError
-from machboost.providers import ProviderStore
+from machboost.providers import ProviderCancelled, ProviderError, ProviderStore
 from machboost.server import (
     GenerationResult,
     MachBoostHTTPServer,
@@ -4195,6 +4195,129 @@ class TeamGatewayHTTPTests(unittest.TestCase):
         self.assertEqual(events[-1]["machboost"]["route"]["source"], "external")
         self.assertTrue(events[-1]["machboost"]["route"]["buffered_upstream"])
         self.assertEqual(len(self.server.manager._models), 0)
+
+    def test_live_external_stream_flushes_before_upstream_finishes(self) -> None:
+        self.request("/api/providers", {
+            "id": "live", "name": "Live", "base_url": "https://example.com/v1",
+            "models": ["paid-model"], "api_key": "test-key",
+        })
+        for path in ("/api/chat", "/v1/chat/completions"):
+            with self.subTest(path=path):
+                release = threading.Event()
+                reached_end = threading.Event()
+                def transport(config, endpoint, payload, headers, cancel):
+                    yield {"choices": [{"index": 0, "delta": {"content": "first"}, "finish_reason": None}]}
+                    if not release.wait(5):
+                        raise AssertionError("the first event was buffered")
+                    yield {"choices": [{"index": 0, "delta": {"reasoning_content": "thought"}, "finish_reason": None}]}
+                    yield {"choices": [{"index": 0, "delta": {"content": " second"}, "finish_reason": None}]}
+                    reached_end.set()
+                    yield {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                           "usage": {"prompt_tokens": 7, "completion_tokens": 3}}
+                self.provider_store.stream_transport = transport
+                request = Request(self.base_url + path, data=json.dumps({
+                    "model": "mlx-community/example", "messages": [{"role": "user", "content": "hello"}],
+                    "stream": True, "request_id": "live-stream-test",
+                    "machboost": {"route": {"mode": "external_only", "provider_id": "live", "model": "paid-model"}},
+                }).encode(), headers={"Authorization": "Bearer admin-secret", "Content-Type": "application/json"})
+                try:
+                    with urlopen(request, timeout=8) as response:
+                        first = response.readline()
+                        self.assertIn(b"first", first)
+                        self.assertFalse(reached_end.is_set())
+                        release.set()
+                        remaining = response.read()
+                        self.assertIn(b"second", remaining)
+                        self.assertIn(b"thought", remaining)
+                        packets = [json.loads(line.removeprefix("data: "))
+                                   for line in remaining.decode().splitlines()
+                                   if line.startswith(("{", "data: {"))]
+                        self.assertFalse(packets[-1]["machboost"]["route"]["buffered_upstream"])
+                finally:
+                    release.set()
+        self.assertEqual(len(self.server.manager._models), 0)
+
+    def test_external_stream_error_after_output_does_not_switch_to_local(self) -> None:
+        self.request("/api/providers", {
+            "id": "live", "name": "Live", "base_url": "https://example.com",
+            "models": ["mlx-community/example"], "api_key": "test-key",
+        })
+        def transport(*args):
+            yield {"choices": [{"delta": {"content": "partial"}}]}
+            raise ProviderError("upstream disconnected", transient=True)
+        self.provider_store.stream_transport = transport
+        for path in ("/api/chat", "/v1/chat/completions"):
+            _, _, body = self.request(path, {
+                "model": "mlx-community/example", "messages": [{"role": "user", "content": "hello"}],
+                "stream": True,
+                "machboost": {"route": {"mode": "external_first", "provider_id": "live"}},
+            }, raw=True)
+            self.assertIn(b"partial", body)
+            self.assertIn(b"upstream disconnected", body)
+        self.assertEqual(len(self.server.manager._models), 0)
+
+    def test_external_stream_cancellation_uses_request_registry(self) -> None:
+        self.request("/api/providers", {
+            "id": "live", "name": "Live", "base_url": "https://example.com",
+            "models": ["mlx-community/example"], "api_key": "test-key",
+        })
+        def transport(config, path, payload, headers, cancel):
+            yield {"choices": [{"delta": {"content": "first"}}]}
+            if cancel.wait(5):
+                raise ProviderCancelled()
+            raise AssertionError("cancel did not reach upstream")
+        self.provider_store.stream_transport = transport
+        request = Request(self.base_url + "/api/chat", data=json.dumps({
+            "model": "mlx-community/example", "messages": [{"role": "user", "content": "hello"}],
+            "stream": True, "request_id": "cancel-paid-stream",
+            "machboost": {"route": {"mode": "external_only", "provider_id": "live"}},
+        }).encode(), headers={"Authorization": "Bearer admin-secret", "Content-Type": "application/json"})
+        with urlopen(request, timeout=8) as response:
+            self.assertIn(b"first", response.readline())
+            _, cancelled = self.request("/api/cancel", {"request_id": "cancel-paid-stream"})
+            self.assertTrue(cancelled["cancelled"])
+            self.assertIn(b'"cancelled"', response.read())
+
+    def test_external_stream_preserves_parallel_tool_ids_and_arguments(self) -> None:
+        self.request("/api/providers", {
+            "id": "live", "name": "Live", "base_url": "https://example.com",
+            "models": ["mlx-community/example"], "api_key": "test-key",
+        })
+        def transport(config, path, payload, headers, cancel):
+            self.assertEqual(payload["messages"][-2]["tool_calls"][0]["function"]["arguments"], '{"path": "old.py"}')
+            self.assertEqual(payload["messages"][-1]["tool_call_id"], "previous")
+            yield {"choices": [{"delta": {"tool_calls": [
+                {"index": 0, "id": "call-a", "type": "function", "function": {"name": "read_file", "arguments": '{"path":'}},
+                {"index": 1, "id": "call-b", "type": "function", "function": {"name": "list_files", "arguments": "{"}},
+            ]}}]}
+            yield {"choices": [{"delta": {"tool_calls": [
+                {"index": 0, "function": {"arguments": '"new.py"}'}},
+                {"index": 1, "function": {"arguments": "}"}},
+            ]}, "finish_reason": "tool_calls"}]}
+        self.provider_store.stream_transport = transport
+        for path in ("/api/chat", "/v1/chat/completions"):
+            with self.subTest(path=path):
+                _, _, body = self.request(path, {
+                    "model": "mlx-community/example", "stream": True,
+                    "messages": [
+                        {"role": "assistant", "content": "", "tool_calls": [
+                            {"id": "previous", "function": {"name": "read_file", "arguments": {"path": "old.py"}}},
+                        ]},
+                        {"role": "tool", "content": "file content", "tool_call_id": "previous"},
+                    ],
+                    "machboost": {"route": {"mode": "external_only", "provider_id": "live"}},
+                }, raw=True)
+                packets = [json.loads(line.removeprefix("data: ")) for line in body.decode().splitlines()
+                           if line.startswith(("{", "data: {"))]
+                if path == "/api/chat":
+                    calls = packets[0]["message"]["tool_calls"]
+                    self.assertEqual([call["id"] for call in calls], ["call-a", "call-b"])
+                    self.assertEqual(calls[0]["function"]["arguments"], {"path": "new.py"})
+                    self.assertEqual(packets[-1]["done_reason"], "tool_calls")
+                else:
+                    self.assertEqual(packets[0]["choices"][0]["delta"]["tool_calls"][0]["id"], "call-a")
+                    self.assertEqual(packets[1]["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"], '"new.py"}')
+                    self.assertEqual(packets[-1]["choices"][0]["finish_reason"], "tool_calls")
 
     def test_streaming_local_first_falls_back_before_headers_on_queue_overload(self) -> None:
         self.request(
