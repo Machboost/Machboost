@@ -255,12 +255,17 @@ struct ChatView: View {
                     showsModelBrowser.toggle()
                 } label: {
                     HStack(spacing: 9) {
-                        AppIconTile(symbol: modelIcon(selectedModel), size: 32)
+                        AppIconTile(symbol: showsPaidModelSelection ? "cloud" : modelIcon(selectedModel), size: 32)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(selectedModel?.displayName ?? conversation.model)
+                            Text(showsPaidModelSelection ? effectiveProviderModel : (selectedModel?.displayName ?? conversation.model))
                                 .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(1)
-                            if let selectedModel {
+                            if showsPaidModelSelection, let selectedProvider {
+                                Text("\(selectedProvider.name) \u{00b7} Paid API")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            } else if let selectedModel {
                                 Text(modelSubtitle(selectedModel))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -343,7 +348,7 @@ struct ChatView: View {
                 Text("Choose a model")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
-                AppBadge("\(browsableModels.count) models")
+                AppBadge("\(browsableModels.count + browsablePaidModels.count) models")
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -382,12 +387,29 @@ struct ChatView: View {
 
             Divider()
 
-            if browsableModels.isEmpty {
+            if browsableModels.isEmpty && browsablePaidModels.isEmpty {
                 ContentUnavailableView.search(text: modelSearch)
                     .frame(maxWidth: .infinity, minHeight: 260)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        if !browsablePaidModels.isEmpty {
+                            Text("Paid API")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                            ForEach(browsablePaidModels) { choice in
+                                paidModelBrowserRow(choice)
+                            }
+                        }
+                        if !browsableModels.isEmpty {
+                            Text("Local & connected models")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                        }
                         ForEach(browsableModels) { model in
                             modelBrowserRow(model)
                         }
@@ -416,6 +438,47 @@ struct ChatView: View {
         .background(AppStyle.canvas)
     }
 
+    private var showsPaidModelSelection: Bool {
+        routeMode.usesExternal && selectedProvider != nil
+    }
+
+    private var browsablePaidModels: [PaidModelChoice] {
+        guard modelFilter == .all || modelFilter == .ready else { return [] }
+        return availableProviders.flatMap { provider in
+            provider.models.filter { $0 != "*" }.map {
+                PaidModelChoice(providerID: provider.id, providerName: provider.name, model: $0)
+            }
+        }.filter { $0.matches(modelSearch) }
+    }
+
+    private func paidModelBrowserRow(_ choice: PaidModelChoice) -> some View {
+        Button {
+            providerID = choice.providerID
+            providerModel = choice.model
+            if !routeMode.usesExternal {
+                routeModeValue = ChatRouteMode.externalOnly.rawValue
+            }
+            showsModelBrowser = false
+        } label: {
+            HStack(spacing: 12) {
+                AppIconTile(symbol: "cloud", size: 36)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(choice.model).font(.body.weight(.medium)).lineLimit(1)
+                    Text(choice.providerName).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if showsPaidModelSelection,
+                   providerID == choice.providerID, effectiveProviderModel == choice.model {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(AppStyle.accent)
+                }
+            }
+            .padding(10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(AppRowButtonStyle())
+        .accessibilityIdentifier("paid-model-\(choice.model)")
+    }
+
     private func modelBrowserRow(_ model: CatalogModel) -> some View {
         let loaded = appState.activeLoadedModels.contains {
             $0.model == model.name || $0.model == model.repository
@@ -426,6 +489,9 @@ struct ChatView: View {
 
         return Button {
             if model.cached {
+                if routeMode == .externalOnly {
+                    routeModeValue = ChatRouteMode.localOnly.rawValue
+                }
                 conversation.model = model.name
                 conversation.updatedAt = .now
                 try? modelContext.save()
@@ -598,11 +664,11 @@ struct ChatView: View {
         Form {
             LabeledContent("Request route", value: routeMode.title)
             if routeMode.usesExternal {
-                if appState.inferenceMode == .team {
-                    LabeledContent("Paid API", value: "Managed by host")
-                } else if let selectedProvider {
+                if let selectedProvider {
                     LabeledContent("Paid API", value: selectedProvider.name)
                     LabeledContent("API model", value: effectiveProviderModel)
+                } else if appState.teamIsConnected {
+                    LabeledContent("Paid API", value: "Managed by host")
                 }
             }
             Divider()
@@ -698,7 +764,7 @@ struct ChatView: View {
 
             if routeMode.usesExternal {
                 Divider()
-                if appState.inferenceMode == .team {
+                if availableProviders.isEmpty && appState.teamIsConnected {
                     Text("Paid API configured by host")
                 } else if availableProviders.isEmpty {
                     Text("Add an API in Server")
@@ -1343,7 +1409,7 @@ struct ChatView: View {
     }
 
     private var externalRoutingAvailable: Bool {
-        appState.inferenceMode == .team || !availableProviders.isEmpty
+        appState.teamIsConnected || !availableProviders.isEmpty
     }
 
     private var effectiveProviderModel: String {
@@ -1356,7 +1422,7 @@ struct ChatView: View {
         let mode = routeMode.usesExternal && !externalRoutingAvailable
             ? ChatRouteMode.localOnly
             : routeMode
-        let remote = appState.inferenceMode == .team
+        let remote = appState.teamIsConnected && selectedProvider == nil
         return .init(
             route: .init(
                 mode: mode.rawValue,
@@ -2487,6 +2553,21 @@ struct ChatView: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+}
+
+struct PaidModelChoice: Identifiable {
+    let providerID: String
+    let providerName: String
+    let model: String
+
+    var id: String { "\(providerID):\(model)" }
+
+    func matches(_ search: String) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty
+            || model.localizedCaseInsensitiveContains(query)
+            || providerName.localizedCaseInsensitiveContains(query)
     }
 }
 
