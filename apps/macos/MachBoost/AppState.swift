@@ -473,10 +473,15 @@ final class AppState {
             mcpServers = values.3.mcpServers
             skills = values.3.skills
             if !usesUITestAPI {
+                var restoredProviderSecret = false
                 for provider in values.2 where !provider.hasSecret {
                     guard let secret = await KeychainStore.providerSecretAsync(id: provider.id)
                     else { continue }
                     try await api.setProviderSecret(id: provider.id, apiKey: secret)
+                    restoredProviderSecret = true
+                }
+                if restoredProviderSecret {
+                    self.providers = try await api.providers()
                 }
             }
         } catch MachBoostAPIError.server(status: 404, message: _) {
