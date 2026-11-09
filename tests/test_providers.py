@@ -1,4 +1,9 @@
 import os
+import io
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,9 +12,11 @@ from unittest.mock import MagicMock, patch
 from machboost.providers import (
     ProviderBudgetError,
     ProviderConfig,
+    ProviderCancelled,
     ProviderError,
     ProviderStore,
     _default_transport,
+    _default_stream_transport,
     route_with_fallback,
 )
 
@@ -131,6 +138,178 @@ class ProviderTransportTests(unittest.TestCase):
                 request = opened.call_args.args[0]
                 self.assertEqual(request.full_url, expected)
                 self.assertEqual(request.get_header("Authorization"), "Bearer test")
+
+
+class ProviderStreamingTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.store = ProviderStore(Path(self.temporary.name) / "providers.sqlite3")
+        self.store.configure(name="One", provider_id="one", base_url="https://example.com/v1",
+                             models=["test"], api_key="test-key")
+
+    def tearDown(self):
+        self.store.close()
+        self.temporary.cleanup()
+
+    def packet(self, delta, finish=None):
+        return {"choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+    def test_stream_emits_before_completion_and_assembles_tool_fragments(self):
+        seen = []
+        def upstream(config, path, payload, headers, cancel):
+            self.assertTrue(payload["stream"])
+            self.assertTrue(payload["stream_options"]["include_usage"])
+            self.assertEqual(headers["Authorization"], "Bearer test-key")
+            yield self.packet({"reasoning_content": "Think "})
+            self.assertEqual(len(seen), 1)
+            yield self.packet({"reasoning_content": "first", "content": "Hello "})
+            yield self.packet({"content": "world", "tool_calls": [
+                {"index": 0, "id": "a", "function": {"name": "read", "arguments": '{"path":'}},
+                {"index": 1, "id": "b", "function": {"name": "list", "arguments": "{"}},
+            ]})
+            yield self.packet({"tool_calls": [
+                {"index": 0, "function": {"arguments": '"a.py"}'}},
+                {"index": 1, "function": {"arguments": "}"}},
+            ]}, "tool_calls")
+            yield {"choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 8}}
+        self.store.stream_transport = upstream
+        result = self.store.stream_chat({"model": "test"}, on_chunk=seen.append)
+        message = result.response["choices"][0]["message"]
+        self.assertEqual(message["content"], "Hello world")
+        self.assertEqual(message["reasoning_content"], "Think first")
+        self.assertEqual(json.loads(message["tool_calls"][0]["function"]["arguments"]), {"path": "a.py"})
+        self.assertEqual(json.loads(message["tool_calls"][1]["function"]["arguments"]), {})
+        self.assertTrue(result.streamed)
+        self.assertIsNotNone(result.time_to_first_token_seconds)
+        self.assertEqual(result.stats["generated_tokens"], 8)
+        self.assertEqual(self.store.usage()["usage"][0]["requests"], 1)
+
+    def test_failure_after_a_delta_never_retries_another_provider(self):
+        self.store.configure(name="Two", provider_id="two", base_url="https://other.example.com",
+                             models=["test"], api_key="another-key")
+        calls = []
+        def upstream(config, *args):
+            calls.append(config.id)
+            yield self.packet({"content": "partial"})
+            raise ProviderError("disconnected", transient=True)
+        self.store.stream_transport = upstream
+        seen = []
+        with self.assertRaises(ProviderError):
+            self.store.stream_chat({"model": "test"}, on_chunk=seen.append)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(seen), 1)
+
+    def test_transient_failure_before_a_delta_can_retry(self):
+        self.store.configure(name="Two", provider_id="two", base_url="https://other.example.com",
+                             models=["test"], api_key="another-key")
+        calls = []
+        def upstream(config, *args):
+            calls.append(config.id)
+            if len(calls) == 1:
+                raise ProviderError("busy", status=503, transient=True)
+            yield self.packet({"content": "ok"}, "stop")
+        self.store.stream_transport = upstream
+        result = self.store.stream_chat({"model": "test"}, on_chunk=lambda packet: None)
+        self.assertEqual(result.text, "ok")
+        self.assertEqual(len(calls), 2)
+
+    def test_cancellation_closes_generator_without_replaying(self):
+        cancelled = threading.Event()
+        closed = threading.Event()
+        def upstream(*args):
+            try:
+                yield self.packet({"content": "one"})
+                yield self.packet({"content": "two"}, "stop")
+            finally:
+                closed.set()
+        self.store.stream_transport = upstream
+        with self.assertRaises(ProviderCancelled):
+            self.store.stream_chat({"model": "test"}, on_chunk=lambda packet: cancelled.set(),
+                                   cancel_event=cancelled)
+        self.assertTrue(closed.is_set())
+
+    def test_truncated_stream_is_not_reported_as_success(self):
+        self.store.stream_transport = lambda *args: iter([self.packet({"content": "partial"})])
+        with self.assertRaisesRegex(ProviderError, "completion marker"):
+            self.store.stream_chat({"model": "test"}, on_chunk=lambda packet: None)
+        self.assertEqual(self.store.usage()["usage"], [])
+
+    def test_sse_parser_handles_comments_multiline_unicode_and_done(self):
+        wire = '\ufeff: heartbeat\r\ndata: {"choices": [],\r\ndata: "label": "caf\u00e9"}\r\n\r\ndata: [DONE]\n\n'
+        config = self.store.candidates("test", "one")[0]
+        with patch("machboost.providers.urllib.request.urlopen") as opened:
+            opened.return_value.__enter__.return_value = io.BytesIO(wire.encode("utf-8"))
+            events = list(_default_stream_transport(config, "/chat/completions", {}, {}, None))
+        self.assertEqual(events, [{"choices": [], "label": "caf\u00e9"}])
+
+    def test_sse_parser_rejects_malformed_json(self):
+        config = self.store.candidates("test", "one")[0]
+        with patch("machboost.providers.urllib.request.urlopen") as opened:
+            opened.return_value.__enter__.return_value = io.BytesIO(b"data: not-json\n\n")
+            with self.assertRaisesRegex(ProviderError, "invalid SSE JSON"):
+                list(_default_stream_transport(config, "/chat/completions", {}, {}, None))
+
+    def test_usage_option_is_removed_only_when_explicitly_rejected(self):
+        config = self.store.candidates("test", "one")[0]
+        response = MagicMock()
+        response.__enter__.return_value = io.BytesIO(b'data: {"choices":[]}\n\ndata: [DONE]\n\n')
+        rejected = HTTPError("https://example.com", 400, "Bad Request", {},
+                             io.BytesIO(b'{"error":{"param":"stream_options"}}'))
+        with patch("machboost.providers.urllib.request.urlopen", side_effect=[rejected, response]) as opened:
+            list(_default_stream_transport(config, "/chat/completions",
+                                           {"stream": True, "stream_options": {"include_usage": True}}, {}, None))
+            self.assertEqual(opened.call_count, 2)
+            self.assertNotIn("stream_options", json.loads(opened.call_args.args[0].data))
+        rejected = HTTPError("https://example.com", 401, "Unauthorized", {}, io.BytesIO(b'{}'))
+        with patch("machboost.providers.urllib.request.urlopen", side_effect=rejected) as opened:
+            with self.assertRaises(ProviderError):
+                list(_default_stream_transport(config, "/chat/completions", {"stream_options": {}}, {}, None))
+            self.assertEqual(opened.call_count, 1)
+
+    def test_real_http_stream_cancels_a_blocked_read(self):
+        release = threading.Event()
+        first = threading.Event()
+        cancelled = threading.Event()
+        failures = []
+        class Upstream(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(b'data: {"choices":[{"delta":{"content":"first"}}]}\n\n')
+                self.wfile.flush()
+                release.wait(5)
+
+            def log_message(self, *args):
+                pass
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.store.configure(name="HTTP", provider_id="http", base_url=f"http://127.0.0.1:{server.server_port}/v1",
+                             models=["test"], api_key="test-key")
+        def read():
+            try:
+                self.store.stream_chat({"model": "test"}, provider_id="http",
+                                       on_chunk=lambda packet: first.set(), cancel_event=cancelled)
+            except Exception as exc:
+                failures.append(exc)
+        reader = threading.Thread(target=read, daemon=True)
+        try:
+            reader.start()
+            self.assertTrue(first.wait(3), "first SSE event was buffered")
+            cancelled.set()
+            reader.join(2)
+            self.assertFalse(reader.is_alive(), "cancellation did not interrupt a blocked socket read")
+            self.assertEqual(len(failures), 1)
+            self.assertIsInstance(failures[0], ProviderCancelled)
+        finally:
+            cancelled.set()
+            release.set()
+            reader.join(3)
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
 
 
 class RouteFallbackTests(unittest.TestCase):
