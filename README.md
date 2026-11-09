@@ -51,7 +51,7 @@ Treat every workload as uncalibrated until it passes a same-model paired benchma
 | Concurrent text API serving | bounded tenant-fair admission, explicit overload responses, per-key limits, and isolated model replicas | usable; replicas consume additional memory and do not guarantee higher GPU throughput |
 | Team gateway | hashed scoped keys, model allowlists, enrolled desktop clients, model requests, fair queueing, configurable local traces, and evaluations | usable on a trusted private network; MachBoost does not terminate TLS |
 | Team memory | private or administrator-published shared entries, workspace/revision/dependency isolation, bounded retrieval, and opt-in deterministic exact-response reuse | useful for recurring team work; not a decode-throughput speedup and not enabled as a universal response cache |
-| External fallback | OpenAI-compatible providers with process-only secrets, monthly budgets, cost accounting, and transient-failure routing | usable for resilience; remote providers require HTTPS and streaming may be buffered when the upstream response is buffered |
+| External fallback | OpenAI-compatible providers with saved credentials, monthly budgets, cost accounting, and transient-failure routing | streams upstream text, reasoning, and tool-call deltas; remote providers require HTTPS |
 | Repository workspace prefix reuse | latest 8,843-file Qwen2.5 3B audit reached 2.894x median with 10/10 exact token pairs; earlier 3B and 7B audits reached 3.021x and 3.282x with 6/6 exact pairs | promising for later questions over a stable indexed repo; not a first-request, arbitrary-model, or decode-throughput claim |
 | Context-backed MLX text | latest broad Llama 3.2 3B suite was 1.008x aggregate with 20/21 exact pairs; favorable controlled continuations can be materially faster | experimental; never generalize a fixture result beyond its workload |
 | Repeated unchanged image | 5.14x-17.44x model-level paired medians on one synthetic image and short extraction prompts | promising for repeated-image prefill; not a first-view or decode result |
@@ -913,9 +913,19 @@ variable, or the macOS Keychain, never in the team database.
 
 The native chat route menu and CLI can map a local model to a different paid
 provider model. The response records whether local or external inference was
-used, provider latency, and configured cost. External responses are currently
-buffered before MachBoost emits compatible stream events, so this fallback is a
-resilience/capacity control rather than a local-inference speedup claim.
+used, provider latency, and configured cost. Streaming requests consume upstream
+Chat Completions SSE events as they arrive rather than waiting for the full
+response. OpenAI clients receive incremental text, reasoning, and tool-call
+arguments; native chat receives text/reasoning immediately and complete tool
+calls once their arguments are assembled. Cancellation closes the upstream
+stream. Failover is allowed only before output starts, never halfway through a
+response. This is a delivery/resilience feature, not a local-inference speedup.
+
+In the macOS app, add a provider under **Server > Memory & fallback**. Both
+`https://api.example.com` and `https://api.example.com/v1` are accepted as base
+URLs. Its explicit model names appear in the chat picker's **Paid API** section,
+including when local/API fallback is selected. Models configured only as `*`
+remain available through the route menu's same-model-name option.
 
 ```sh
 machboost run qwen2.5:7b \
