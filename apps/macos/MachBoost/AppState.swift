@@ -952,7 +952,8 @@ final class AppState {
     ) throws -> AsyncThrowingStream<ChatEvent, Error> {
         let candidates = try inferenceCandidates(
             for: request.model,
-            preferredHostID: preferredHostID
+            preferredHostID: preferredHostID,
+            route: request.machboost?.route
         )
         let initialCandidate = candidates[0]
         beginRequestRoute(
@@ -1401,9 +1402,12 @@ final class AppState {
 
     private func inferenceCandidates(
         for model: String,
-        preferredHostID: String? = nil
+        preferredHostID: String? = nil,
+        route: ChatRequest.Extensions.Route? = nil
     ) throws -> [InferenceCandidate] {
-        guard inferenceMode == .team else {
+        // Provider IDs belong to this daemon, not to a remote host's registry.
+        // API-only requests do not need locally cached model weights.
+        guard inferenceMode == .team && !Self.usesLocalProvider(route) else {
             return [
                 InferenceCandidate(
                     score: 0,
@@ -1495,6 +1499,13 @@ final class AppState {
             }
             return $0.score < $1.score
         }
+    }
+
+    static func usesLocalProvider(_ route: ChatRequest.Extensions.Route?) -> Bool {
+        guard let route, let providerID = route.providerID, !providerID.isEmpty else {
+            return false
+        }
+        return ["external_only", "external_first", "local_first"].contains(route.mode)
     }
 
     private func beginRequestRoute(requestID: String, candidate: InferenceCandidate) {
