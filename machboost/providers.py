@@ -460,8 +460,13 @@ def _default_transport(
     payload: dict[str, Any],
     headers: dict[str, str],
 ) -> dict[str, Any]:
+    base = urlparse(config.base_url)
+    prefix = base.path.rstrip("/")
+    if not prefix.endswith("/v1"):
+        prefix += "/v1"
+    endpoint = base._replace(path=prefix + path, fragment="").geturl()
     request = urllib.request.Request(
-        config.base_url + "/v1" + path,
+        endpoint,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", **headers},
         method="POST",
