@@ -4060,6 +4060,10 @@ class TeamGatewayHTTPTests(unittest.TestCase):
                 "model": "mlx-community/example",
                 "messages": [{"role": "user", "content": "hello"}],
                 "stream": False,
+                "context": [],
+                "keep_alive": "forever",
+                "request_id": "paid-api-payload-test",
+                "options": {"num_predict": 42, "temperature": 0.2, "num_ctx": 4096},
                 "machboost": {
                     "route": {
                         "mode": "external_only",
@@ -4074,6 +4078,12 @@ class TeamGatewayHTTPTests(unittest.TestCase):
         self.assertEqual(response["machboost"]["backend"], "external")
         self.assertEqual(response["machboost"]["route"]["source"], "external")
         self.assertEqual(response["eval_count"], 2)
+        upstream = self.provider_calls[-1][2]
+        self.assertEqual(upstream["max_tokens"], 42)
+        self.assertEqual(upstream["temperature"], 0.2)
+        self.assertFalse(upstream["stream"])
+        for field in ("context", "keep_alive", "request_id", "options", "num_ctx", "machboost"):
+            self.assertNotIn(field, upstream)
 
     def test_ollama_chat_external_stream_preserves_ndjson_contract(self) -> None:
         self.request(
