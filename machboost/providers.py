@@ -3,14 +3,16 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import socket
 import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
+from http.client import HTTPException
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Iterable, Optional, Sequence
 from urllib.parse import urlparse
 
 
@@ -28,6 +30,11 @@ class ProviderError(RuntimeError):
 class ProviderBudgetError(ProviderError):
     def __init__(self, message: str):
         super().__init__(message, status=429, transient=False)
+
+
+class ProviderCancelled(ProviderError):
+    def __init__(self):
+        super().__init__("provider request cancelled", status=499)
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,20 @@ class ProviderResult:
     completion_tokens: int
     cost_usd: float
     latency_seconds: float
+    streamed: bool = False
+    time_to_first_token_seconds: Optional[float] = None
+
+    @property
+    def stats(self) -> dict[str, int]:
+        return {"prompt_tokens": self.prompt_tokens, "generated_tokens": self.completion_tokens}
+
+    @property
+    def text(self) -> str:
+        return str(self.response["choices"][0]["message"].get("content") or "")
+
+    @property
+    def time_to_first_token_s(self) -> Optional[float]:
+        return self.time_to_first_token_seconds
 
 
 Transport = Callable[
@@ -83,12 +104,16 @@ class ProviderStore:
         path: str | Path,
         *,
         transport: Optional[Transport] = None,
+        stream_transport: Optional[Callable[..., Iterable[dict[str, Any]]]] = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.path = Path(path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
         self.transport = transport or _default_transport
+        self.stream_transport = stream_transport or (
+            _default_stream_transport if transport is None else None
+        )
         self._secrets: dict[str, str] = {}
         self._lock = threading.RLock()
         self._connection = sqlite3.connect(
@@ -295,6 +320,112 @@ class ProviderStore:
                     raise
         raise ProviderError("all external providers failed: " + "; ".join(errors), transient=True)
 
+    def stream_chat(
+        self,
+        payload: dict[str, Any],
+        *,
+        on_chunk: Callable[[dict[str, Any]], None],
+        provider_id: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> ProviderResult:
+        model = str(payload.get("model") or "").strip()
+        if not model:
+            raise ValueError("model is required")
+        candidates = self.candidates(model, provider_id)
+        if not candidates:
+            raise ProviderError(f"no enabled external provider supports model {model}", status=404)
+        for config in candidates:
+            if cancel_event is not None and cancel_event.is_set():
+                raise ProviderCancelled()
+            self._check_budget(config)
+            secret = self._secret_for(config)
+            if not secret:
+                raise ProviderError(f"provider {config.name} has no API key configured", status=401)
+            started = time.monotonic()
+            emitted = False
+            first_token = None
+            usage: dict[str, Any] = {}
+            content: list[str] = []
+            reasoning: list[str] = []
+            calls: dict[int, dict[str, Any]] = {}
+            finish_reason = None
+            chunks = None
+            try:
+                headers = {"Authorization": f"Bearer {secret}"}
+                request = {**payload, "stream": True, "stream_options": {"include_usage": True}}
+                if self.stream_transport is None:
+                    response = self.transport(config, "/chat/completions", {**payload, "stream": False}, headers)
+                    choice = response["choices"][0]
+                    chunks = iter([
+                        {"choices": [{"index": 0, "delta": choice["message"], "finish_reason": None}]},
+                        {"choices": [{"index": 0, "delta": {}, "finish_reason": choice.get("finish_reason") or "stop"}], "usage": response.get("usage", {})},
+                    ])
+                else:
+                    chunks = iter(self.stream_transport(config, "/chat/completions", request, headers, cancel_event))
+                for packet in chunks:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise ProviderCancelled()
+                    if packet.get("error"):
+                        raise ProviderError("upstream stream error: " + str(packet["error"]), transient=True)
+                    if isinstance(packet.get("usage"), dict):
+                        usage = packet["usage"]
+                    for choice in packet.get("choices") or []:
+                        if choice.get("index", 0) != 0:
+                            continue
+                        delta = choice.get("delta") or {}
+                        text = delta.get("content") or ""
+                        thought = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                        if isinstance(text, str):
+                            content.append(text)
+                        if isinstance(thought, str):
+                            reasoning.append(thought)
+                        for ordinal, call in enumerate(delta.get("tool_calls") or []):
+                            index = int(call.get("index", ordinal))
+                            accumulated = calls.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            if call.get("id"):
+                                accumulated["id"] = call["id"]
+                            function = call.get("function") or {}
+                            for field in ("name", "arguments"):
+                                fragment = function.get(field)
+                                if isinstance(fragment, str):
+                                    accumulated["function"][field] += fragment
+                                elif field == "arguments" and isinstance(fragment, dict):
+                                    accumulated["function"][field] += json.dumps(fragment)
+                        if first_token is None and (text or thought or delta.get("tool_calls")):
+                            first_token = time.monotonic() - started
+                        if choice.get("finish_reason") is not None:
+                            finish_reason = choice["finish_reason"]
+                    # Once anything has been forwarded, never replay on another provider.
+                    emitted = True
+                    on_chunk(packet)
+                if finish_reason is None:
+                    raise ProviderError("upstream stream ended before a completion marker", transient=True)
+                message: dict[str, Any] = {"role": "assistant", "content": "".join(content)}
+                if reasoning:
+                    message["reasoning_content"] = "".join(reasoning)
+                if calls:
+                    message["tool_calls"] = [calls[key] for key in sorted(calls)]
+                prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or 0)
+                cost = (prompt_tokens * config.input_cost_per_million + completion_tokens * config.output_cost_per_million) / 1_000_000
+                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost)
+                return ProviderResult(
+                    provider_id=config.id, model=model,
+                    response={"choices": [{"message": message, "finish_reason": finish_reason}], "usage": usage},
+                    prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                    cost_usd=cost, latency_seconds=time.monotonic() - started,
+                    streamed=self.stream_transport is not None,
+                    time_to_first_token_seconds=first_token,
+                )
+            except ProviderError as exc:
+                if emitted or not exc.transient or config is candidates[-1]:
+                    raise
+            finally:
+                close = getattr(chunks, "close", None)
+                if close is not None:
+                    close()
+        raise ProviderError("all external providers failed", transient=True)
+
     def monthly_spend(self, provider_id: str, *, month: Optional[str] = None) -> float:
         month = month or _month_key(self.clock())
         with self._lock:
@@ -454,19 +585,115 @@ def _can_fallback(exc: Exception) -> bool:
     return bool(getattr(exc, "transient", False))
 
 
+def _provider_endpoint(config: ProviderConfig, path: str) -> str:
+    base = urlparse(config.base_url)
+    prefix = base.path.rstrip("/")
+    if not prefix.endswith("/v1"):
+        prefix += "/v1"
+    return base._replace(path=prefix + path, fragment="").geturl()
+
+
+def _default_stream_transport(
+    config: ProviderConfig,
+    path: str,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    cancel_event: Optional[threading.Event],
+) -> Iterable[dict[str, Any]]:
+    request = urllib.request.Request(
+        _provider_endpoint(config, path), data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream", **headers},
+        method="POST",
+    )
+    finished = threading.Event()
+    try:
+        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+            if cancel_event is not None:
+                def close_when_cancelled() -> None:
+                    while not finished.wait(0.05):
+                        if cancel_event.is_set():
+                            # Closing a buffered reader alone can block behind its
+                            # current read. Shut down the stdlib socket first.
+                            raw = getattr(getattr(response, "fp", None), "raw", None)
+                            connection = getattr(raw, "_sock", None)
+                            if connection is not None:
+                                try:
+                                    connection.shutdown(socket.SHUT_RDWR)
+                                except OSError:
+                                    pass
+                            else:
+                                response.close()
+                            return
+                threading.Thread(target=close_when_cancelled, daemon=True).start()
+            data: list[str] = []
+            event_size = 0
+            first_line = True
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise ProviderCancelled()
+                line = response.readline(1_048_577)
+                if cancel_event is not None and cancel_event.is_set():
+                    raise ProviderCancelled()
+                if len(line) > 1_048_576:
+                    raise ProviderError("upstream SSE line exceeds size limit")
+                decoded = line.decode("utf-8").rstrip("\r\n")
+                if first_line:
+                    decoded = decoded.removeprefix("\ufeff")
+                    first_line = False
+                if decoded.startswith("data:"):
+                    data.append(decoded[5:].removeprefix(" "))
+                    event_size += len(line)
+                    if event_size > 2_097_152:
+                        raise ProviderError("upstream SSE event exceeds size limit")
+                if not decoded or not line:
+                    if data:
+                        event = "\n".join(data)
+                        data = []
+                        event_size = 0
+                        if event.strip() == "[DONE]":
+                            return
+                        packet = json.loads(event)
+                        if not isinstance(packet, dict):
+                            raise ProviderError("upstream SSE event must be a JSON object")
+                        yield packet
+                    if not line:
+                        return
+    except ProviderError:
+        raise
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        if exc.code == 400 and "stream_options" in payload:
+            try:
+                error = json.loads(detail).get("error", {})
+            except (json.JSONDecodeError, AttributeError):
+                error = {}
+            if isinstance(error, dict) and error.get("param") in {
+                "stream_options", "stream_options.include_usage"
+            }:
+                # Some compatible APIs stream but do not implement usage events.
+                compatible = {key: value for key, value in payload.items() if key != "stream_options"}
+                yield from _default_stream_transport(config, path, compatible, headers, cancel_event)
+                return
+        raise ProviderError(f"upstream HTTP {exc.code}: {detail}", status=exc.code,
+                            transient=exc.code in TRANSIENT_STATUS_CODES) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ProviderError("upstream returned invalid SSE JSON", transient=True) from exc
+    except (OSError, ValueError, HTTPException, urllib.error.URLError) as exc:
+        if cancel_event is not None and cancel_event.is_set():
+            raise ProviderCancelled() from exc
+        raise ProviderError(f"upstream stream connection failed: {exc}", transient=True) from exc
+    finally:
+        finished.set()
+
+
 def _default_transport(
     config: ProviderConfig,
     path: str,
     payload: dict[str, Any],
     headers: dict[str, str],
 ) -> dict[str, Any]:
-    base = urlparse(config.base_url)
-    prefix = base.path.rstrip("/")
-    if not prefix.endswith("/v1"):
-        prefix += "/v1"
-    endpoint = base._replace(path=prefix + path, fragment="").geturl()
     request = urllib.request.Request(
-        endpoint,
+        _provider_endpoint(config, path),
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", **headers},
         method="POST",
