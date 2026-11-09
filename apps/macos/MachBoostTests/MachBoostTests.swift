@@ -111,6 +111,34 @@ final class MachBoostTests: XCTestCase {
         XCTAssertEqual(metrics.timeToFirstTokenSeconds, 0.42)
     }
 
+    func testPaidModelSearchMatchesProviderAndModel() {
+        let choice = PaidModelChoice(
+            providerID: "meta", providerName: "Meta Muse", model: "muse-spark-1.3"
+        )
+        XCTAssertTrue(choice.matches(" MUSE "))
+        XCTAssertTrue(choice.matches("spark"))
+        XCTAssertTrue(choice.matches("META"))
+        XCTAssertTrue(choice.matches(""))
+        XCTAssertFalse(choice.matches("gemma"))
+        let other = PaidModelChoice(
+            providerID: "other", providerName: "Another provider", model: choice.model
+        )
+        XCTAssertNotEqual(choice.id, other.id)
+    }
+
+    @MainActor
+    func testExplicitLocalProviderDoesNotRequireRemoteModelAvailability() {
+        for mode in ["external_only", "external_first", "local_first"] {
+            XCTAssertTrue(AppState.usesLocalProvider(.init(
+                mode: mode, providerID: "provider-meta", model: "muse-spark-1.3"
+            )))
+        }
+        XCTAssertFalse(AppState.usesLocalProvider(nil))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "external_only")))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "external_only", providerID: "")))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "local_only", providerID: "provider-meta")))
+    }
+
     @MainActor
     func testInferencePresentationSeparatesRemoteFailureFromLocalDestination() {
         let presentation = AppState.inferencePresentation(
