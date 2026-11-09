@@ -2124,11 +2124,30 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
     ) -> ProviderResult:
         if self.providers is None:
             raise ValueError("external providers require serving with --team-db")
+        # Native clients send Ollama lifecycle/options fields. External APIs
+        # must receive Chat Completions fields, not the original local payload.
+        allowed = {
+            "model", "temperature", "top_p", "n", "stop", "max_tokens",
+            "max_completion_tokens", "presence_penalty", "frequency_penalty",
+            "logit_bias", "logprobs", "top_logprobs", "seed", "response_format",
+            "tools", "tool_choice", "parallel_tool_calls", "user", "reasoning_effort",
+        }
         upstream = {
             key: value
             for key, value in payload.items()
-            if key not in {"machboost", "machboost_options", "workspace_id", "workspace_query"}
+            if key in allowed and value is not None
         }
+        options = payload.get("options")
+        if isinstance(options, dict):
+            for name in ("temperature", "top_p", "seed", "stop"):
+                if name not in upstream and options.get(name) is not None:
+                    upstream[name] = options[name]
+            limit = options.get("num_predict")
+            if (
+                "max_tokens" not in upstream and "max_completion_tokens" not in upstream
+                and isinstance(limit, int) and not isinstance(limit, bool) and limit > 0
+            ):
+                upstream["max_tokens"] = limit
         upstream["messages"] = [dict(message) for message in messages]
         upstream["stream"] = False
         if provider_model:
