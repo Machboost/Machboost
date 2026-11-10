@@ -1,4 +1,5 @@
 import AppKit
+import MachBoostDaemonClient
 import SwiftUI
 
 struct ServerView: View {
@@ -34,6 +35,7 @@ struct ServerView: View {
     @State private var providerModels = ""
     @State private var providerAPIKey = ""
     @State private var providerBudget = ""
+    @State private var pricingProvider: ProviderSummary?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -108,6 +110,9 @@ struct ServerView: View {
             }
         }
         .background(AppStyle.canvas)
+        .sheet(item: $pricingProvider) { provider in
+            ProviderPricingEditor(provider: provider)
+        }
         .onAppear {
             draftConfiguration = appState.configuration
             syncTeamSettings()
@@ -124,6 +129,7 @@ struct ServerView: View {
         .task {
             while !Task.isCancelled {
                 await appState.refreshMetrics()
+                if mode == .memory { await appState.refreshProviders() }
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -797,11 +803,35 @@ struct ServerView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
-                            Text("Spent $\(provider.spentThisMonthUSD.formatted(.number.precision(.fractionLength(4)))) this month")
+                            Text(provider.costEstimateLabel)
                                 .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(provider.estimatedCostAtCurrentRatesUSD == nil ? Color.orange : .secondary)
+                            if let requests = provider.requestsThisMonth,
+                               let input = provider.promptTokensThisMonth,
+                               let output = provider.completionTokensThisMonth {
+                                Text("\(requests) requests · \(input) input tokens · \(output) output tokens this month")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Usage unavailable").font(.caption).foregroundStyle(.secondary)
+                            }
+                            if let missing = provider.missingUsageRequests, missing > 0 {
+                                Text("\(missing) requests have incomplete usage")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                            ForEach(provider.modelUsage ?? [], id: \.model) { usage in
+                                Text("\(usage.model): \(usage.promptTokens) in / \(usage.completionTokens) out · \(usage.pricingConfigured ? "Pricing set" : "Pricing not set")")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
+                        Button { pricingProvider = provider } label: {
+                            Image(systemName: "dollarsign.circle")
+                        }
+                        .help("Edit per-model token prices")
+                        .accessibilityIdentifier("provider-pricing-\(provider.id)")
                         Button(role: .destructive) {
                             Task { await appState.deleteProvider(id: provider.id) }
                         } label: {
@@ -1208,6 +1238,74 @@ struct ServerView: View {
             return "\((seconds * 1_000).formatted(.number.precision(.fractionLength(0)))) ms"
         }
         return "\(seconds.formatted(.number.precision(.fractionLength(2)))) s"
+    }
+}
+
+private struct ProviderPricingEditor: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let provider: ProviderSummary
+    @State private var model = ""
+    @State private var inputRate = ""
+    @State private var outputRate = ""
+    @State private var saving = false
+    @State private var error: String?
+
+    private var validRates: Bool {
+        guard let input = Double(inputRate), let output = Double(outputRate) else { return false }
+        return input.isFinite && output.isFinite && input >= 0 && output >= 0 && !model.isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Model pricing").font(.title3.weight(.semibold))
+            Text(provider.name).foregroundStyle(.secondary)
+            Form {
+                if provider.models.contains("*") {
+                    TextField("Model ID", text: $model)
+                } else {
+                    Picker("Model", selection: $model) {
+                        ForEach(provider.models.filter { $0 != "*" }, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                TextField("Input USD / 1M tokens", text: $inputRate)
+                TextField("Output USD / 1M tokens", text: $outputRate)
+            }
+            Text("Estimates use these prices and reported token usage, not your provider invoice. Discounts, cached-token pricing, and taxes may differ. Interrupted requests can have incomplete usage.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    guard let input = Double(inputRate), let output = Double(outputRate) else { return }
+                    saving = true
+                    Task {
+                        defer { saving = false }
+                        do {
+                            try await appState.setProviderPricing(id: provider.id, model: model, inputRate: input, outputRate: output)
+                            dismiss()
+                        } catch { self.error = error.localizedDescription }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!validRates || saving)
+            }
+        }
+        .padding(24)
+        .frame(width: 480)
+        .onAppear {
+            model = provider.models.first { $0 != "*" } ?? ""
+            loadRates()
+        }
+        .onChange(of: model) { loadRates() }
+    }
+
+    private func loadRates() {
+        let prices = provider.modelUsage?.first { $0.model == model }
+        if let rate = prices?.inputCostPerMillion { inputRate = String(rate) } else { inputRate = "" }
+        if let rate = prices?.outputCostPerMillion { outputRate = String(rate) } else { outputRate = "" }
     }
 }
 
