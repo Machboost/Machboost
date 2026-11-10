@@ -46,7 +46,9 @@ struct ModelSearchField: NSViewRepresentable {
 }
 
 struct ModelsView: View {
+    private enum Source: String, CaseIterable { case local = "Local", online = "Online" }
     @Environment(AppState.self) private var appState
+    @State private var source: Source = .local
     @State private var search = ""
     @State private var advancedRepository = ""
     @State private var pendingDownload: CatalogModel?
@@ -63,7 +65,10 @@ struct ModelsView: View {
                     AppPageHeading("Models", subtitle: "Your model library")
                     Spacer()
                     Button {
-                        Task { await appState.refreshAll() }
+                        Task {
+                            await appState.refreshProviders()
+                            if source == .local { await appState.refreshAll() }
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -73,7 +78,13 @@ struct ModelsView: View {
                 AppFlowLayout(spacing: 8) {
                     AppBadge("\(appState.catalog.filter(\.cached).count) downloaded", symbol: "internaldrive")
                     AppBadge("\(appState.loadedModels.count) loaded", symbol: "memorychip", color: AppStyle.accent)
+                    AppBadge("\(onlineModels.count) online", symbol: "cloud")
                 }
+                Picker("Model source", selection: $source) {
+                    ForEach(Source.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 300)
             }
             .padding(24)
 
@@ -88,31 +99,34 @@ struct ModelsView: View {
                     )
                     .frame(height: 32)
 
-                    if !appState.downloads.isEmpty {
-                        activeDownloadsSection
-                    }
-
-                    if !downloadedModels.isEmpty {
-                        modelSection(title: "Downloaded", models: downloadedModels)
-                    }
-                    if !recommendedModels.isEmpty {
-                        modelSection(title: "Recommended", models: recommendedModels)
-                    }
-                    modelSection(title: "Catalog", models: remainingModels)
-                    if isSearchingHub {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Searching Hugging Face")
+                    if source == .online {
+                        onlineLibrary
+                    } else {
+                        if !appState.downloads.isEmpty {
+                            activeDownloadsSection
+                        }
+                        if !downloadedModels.isEmpty {
+                            modelSection(title: "Downloaded", models: downloadedModels)
+                        }
+                        if !recommendedModels.isEmpty {
+                            modelSection(title: "Recommended", models: recommendedModels)
+                        }
+                        modelSection(title: "Catalog", models: remainingModels)
+                        if isSearchingHub {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Searching Hugging Face")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if !filteredHubModels.isEmpty {
+                            modelSection(title: "Hugging Face", models: filteredHubModels)
+                            Text("Live MLX results. MachBoost checks runtime compatibility before downloading weights.")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else if !filteredHubModels.isEmpty {
-                        modelSection(title: "Hugging Face", models: filteredHubModels)
-                        Text("Live MLX results. MachBoost checks runtime compatibility before downloading weights.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        advancedSection
                     }
-                    advancedSection
                 }
                 .padding(24)
                 .frame(maxWidth: 1000, alignment: .leading)
@@ -171,8 +185,57 @@ struct ModelsView: View {
         .onChange(of: search) { _, value in
             scheduleHubSearch(value)
         }
+        .task { await appState.refreshProviders() }
+        .onChange(of: source) {
+            search = ""
+            hubSearchTask?.cancel()
+            hubModels = []
+            isSearchingHub = false
+            Task { await appState.refreshProviders() }
+        }
         .onDisappear {
             hubSearchTask?.cancel()
+        }
+    }
+
+    private var onlineModels: [PaidModelChoice] {
+        appState.providers.filter(\.enabled).flatMap { provider in
+            provider.models.filter { $0 != "*" }.map {
+                PaidModelChoice(providerID: provider.id, providerName: provider.name, model: $0, hasSecret: provider.hasSecret)
+            }
+        }.filter { $0.matches(search) }
+    }
+
+    @ViewBuilder
+    private var onlineLibrary: some View {
+        if onlineModels.isEmpty {
+            ContentUnavailableView {
+                Label(appState.isRefreshingProviders ? "Loading online models" : "No online models", systemImage: "cloud")
+            } description: {
+                Text(appState.providerError ?? (search.isEmpty ? "No configured provider models." : "No matching online models."))
+            }
+        } else {
+            ForEach(onlineModels) { model in
+                HStack(spacing: 12) {
+                    AppIconTile(symbol: "cloud", size: 36)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.model).font(.body.weight(.semibold)).textSelection(.enabled)
+                        Text(model.providerName).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    AppBadge(model.hasSecret ? "Configured" : "API key required", color: model.hasSecret ? AppStyle.accent : .orange)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(model.model, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(AppIconButtonStyle())
+                    .help("Copy model ID")
+                }
+                .padding(.vertical, 12)
+                Divider()
+            }
         }
     }
 
@@ -286,6 +349,7 @@ struct ModelsView: View {
     }
 
     private func scheduleHubSearch(_ value: String) {
+        guard source == .local else { return }
         hubSearchTask?.cancel()
         let query = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 2 else {
