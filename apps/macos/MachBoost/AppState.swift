@@ -64,6 +64,8 @@ final class AppState {
     private(set) var memories: [MemorySummary] = []
     private(set) var cacheMetrics: CacheMetrics?
     private(set) var providers: [ProviderSummary] = []
+    private(set) var isRefreshingProviders = false
+    private(set) var providerError: String?
     private(set) var mcpServers: [MCPServerSummary] = []
     private(set) var skills: [SkillSummary] = []
     private(set) var lastCreatedTeamToken: String?
@@ -459,35 +461,42 @@ final class AppState {
         }
     }
 
+    func refreshProviders() async {
+        guard serverIsRunning, !isRefreshingProviders else { return }
+        isRefreshingProviders = true
+        defer { isRefreshingProviders = false }
+        do {
+            providers = try await api.providers()
+            if !usesUITestAPI {
+                var restored = false
+                for provider in providers where !provider.hasSecret {
+                    guard let secret = await KeychainStore.providerSecretAsync(id: provider.id) else { continue }
+                    try await api.setProviderSecret(id: provider.id, apiKey: secret)
+                    restored = true
+                }
+                if restored { providers = try await api.providers() }
+            }
+            providerError = nil
+        } catch {
+            providerError = error.localizedDescription
+        }
+    }
+
     func refreshMemoryAndProviders() async {
         guard serverIsRunning else { return }
+        await refreshProviders()
         do {
             async let memories = api.memories(workspaceID: nil)
             async let metrics = api.cacheMetrics()
-            async let providers = api.providers()
             async let extensions = api.extensions()
-            let values = try await (memories, metrics, providers, extensions)
+            let values = try await (memories, metrics, extensions)
             self.memories = values.0
             cacheMetrics = values.1
-            self.providers = values.2
-            mcpServers = values.3.mcpServers
-            skills = values.3.skills
-            if !usesUITestAPI {
-                var restoredProviderSecret = false
-                for provider in values.2 where !provider.hasSecret {
-                    guard let secret = await KeychainStore.providerSecretAsync(id: provider.id)
-                    else { continue }
-                    try await api.setProviderSecret(id: provider.id, apiKey: secret)
-                    restoredProviderSecret = true
-                }
-                if restoredProviderSecret {
-                    self.providers = try await api.providers()
-                }
-            }
+            mcpServers = values.2.mcpServers
+            skills = values.2.skills
         } catch MachBoostAPIError.server(status: 404, message: _) {
             memories = []
             cacheMetrics = nil
-            providers = []
             mcpServers = []
             skills = []
         } catch {
@@ -636,6 +645,11 @@ final class AppState {
         } catch {
             presentedError = error.localizedDescription
         }
+    }
+
+    func setProviderPricing(id: String, model: String, inputRate: Double, outputRate: Double) async throws {
+        try await api.setProviderPricing(id: id, model: model, inputRate: inputRate, outputRate: outputRate)
+        await refreshProviders()
     }
 
     func createTeamKey(
