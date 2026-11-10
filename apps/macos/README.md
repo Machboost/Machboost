@@ -230,6 +230,29 @@ selected per API request with `machboost.route`; the default is `local_only`.
 The provider UI is an administrator configuration surface, while route choice
 and workload policy remain in the calling application.
 
+Saved providers with explicit model IDs appear in the **Online** tab of the
+main chat model picker. Search matches the provider name and model ID. Choosing
+a paid model preserves an existing local/API fallback mode; from local-only
+mode it selects API-only explicitly. The header shows the selected API model,
+while the local model selection remains available for fallback.
+
+The picker refreshes provider state independently of repository, memory, and
+connector endpoints. Models awaiting credential restoration remain visible with
+an API-key warning. They are not filtered out by local Loaded/Vision/Tools filters.
+
+In **Server > Memory & fallback**, each provider shows monthly request counts,
+reported input/output tokens, and either **Cost unknown** or an estimate at
+current prices. The pricing control edits rates per model without changing the
+API key. Estimates are not invoices and do not account for every provider's
+discounts or taxes. Interrupted requests with missing final usage are flagged
+instead of silently appearing free.
+
+Paid chat streams upstream text and reasoning into the conversation as they
+arrive. Tool arguments are assembled before presenting a runnable tool call,
+and tool IDs are retained across follow-up turns. Stop cancels the upstream
+request. These providers use OpenAI-compatible Chat Completions, not a claim of
+local execution or faster model computation.
+
 ## Embedded Runtime
 
 The runtime manifest pins the CPython artifact and checksum. Python wheels are

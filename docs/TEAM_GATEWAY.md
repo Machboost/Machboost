@@ -377,10 +377,34 @@ prices, and estimated USD cost. The check prevents new calls once recorded spend
 reaches the monthly cap; it is not a prepaid billing guarantee for concurrent
 in-flight requests.
 
-External responses honor the OpenAI streaming contract. The current provider
-transport requests a buffered upstream response and emits it as a valid SSE
-chunk with `machboost.route.buffered_upstream=true`, rather than claiming native
-upstream token streaming.
+`POST /api/providers/pricing` is administrator-only and sets
+`provider_id`, `model`, `input_cost_per_million`, and `output_cost_per_million`.
+Rates must be finite and nonnegative. Explicit zero prices mean free; missing
+prices mean unknown. `GET /api/providers` includes per-model usage, incomplete
+usage counters, and `estimated_cost_at_current_rates_usd`. A null estimate must
+not be presented as zero spending. Estimates recalculate historical token counts
+at current rates; they are not provider billing data and exclude provider-specific
+discounts and taxes. The legacy `spent_this_month_usd` field remains the recorded
+estimate at request-time rates, not an invoice total.
+
+External streaming requests use upstream Chat Completions SSE rather than a
+buffered completion. `/v1/chat/completions` forwards incremental text, reasoning,
+and indexed tool-call argument fragments. `/api/chat` emits text and reasoning
+as NDJSON immediately, then complete tool calls with their original IDs so
+clients never execute incomplete JSON arguments. Terminal events preserve the
+upstream finish reason and usage when supplied by the provider.
+
+`machboost.route.buffered_upstream=false` identifies a streamed upstream;
+non-streaming requests and injected buffered transports remain marked as
+buffered. Client cancellation closes the upstream stream, and an error after
+output begins ends that stream with an error rather than replaying on another
+provider or local model. Connection establishment remains bounded by the
+configured provider timeout. Usage/cost records depend on provider-supplied
+usage; interrupted streams may not supply final token totals.
+
+Providers must support the OpenAI Chat Completions streaming protocol. This
+does not automatically support a provider's unrelated proprietary API. Base
+URLs can include the trailing `/v1`; MachBoost does not append it twice.
 
 ## Private Traces
 

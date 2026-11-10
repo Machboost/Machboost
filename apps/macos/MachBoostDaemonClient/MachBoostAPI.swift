@@ -104,6 +104,7 @@ public protocol MachBoostAPIProtocol: AnyObject, Sendable {
         monthlyBudgetUSD: Double?
     ) async throws -> ProviderSummary
     func setProviderSecret(id: String, apiKey: String) async throws
+    func setProviderPricing(id: String, model: String, inputRate: Double, outputRate: Double) async throws
     func deleteProvider(id: String) async throws
     func evaluate(
         traceIDs: [String],
@@ -254,6 +255,9 @@ public extension MachBoostAPIProtocol {
         throw MachBoostAPIError.server(status: 501, message: "Provider routing is unavailable.")
     }
     func setProviderSecret(id: String, apiKey: String) async throws {}
+    func setProviderPricing(id: String, model: String, inputRate: Double, outputRate: Double) async throws {
+        throw MachBoostAPIError.server(status: 501, message: "Provider pricing is unavailable.")
+    }
     func deleteProvider(id: String) async throws {}
 
     func createTeamKey(
@@ -710,6 +714,13 @@ public final class MachBoostAPI: MachBoostAPIProtocol, @unchecked Sendable {
             jsonObject: payload
         )
         return response.provider
+    }
+
+    public func setProviderPricing(id: String, model: String, inputRate: Double, outputRate: Double) async throws {
+        let _: ProviderResponse = try await post("/api/providers/pricing", jsonObject: [
+            "provider_id": id, "model": model,
+            "input_cost_per_million": inputRate, "output_cost_per_million": outputRate,
+        ])
     }
 
     public func deleteProvider(id: String) async throws {

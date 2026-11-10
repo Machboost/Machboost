@@ -111,6 +111,51 @@ final class MachBoostTests: XCTestCase {
         XCTAssertEqual(metrics.timeToFirstTokenSeconds, 0.42)
     }
 
+    func testPaidModelSearchMatchesProviderAndModel() {
+        let choice = PaidModelChoice(
+            providerID: "meta", providerName: "Meta Muse", model: "muse-spark-1.3"
+        )
+        XCTAssertTrue(choice.matches(" MUSE "))
+        XCTAssertTrue(choice.matches("spark"))
+        XCTAssertTrue(choice.matches("META"))
+        XCTAssertTrue(choice.matches(""))
+        XCTAssertFalse(choice.matches("gemma"))
+        let other = PaidModelChoice(
+            providerID: "other", providerName: "Another provider", model: choice.model
+        )
+        XCTAssertNotEqual(choice.id, other.id)
+        let unready = PaidModelChoice(providerID: "meta", providerName: "Meta Muse", model: choice.model, hasSecret: false)
+        XCTAssertTrue(unready.matches("muse"))
+        XCTAssertFalse(unready.hasSecret)
+    }
+
+    func testProviderCostDistinguishesUnknownFromExplicitZeroEstimate() throws {
+        let base = #"{"id":"meta","name":"Meta","base_url":"https://example.com/v1","models":["spark"],"enabled":true,"has_secret":true,"spent_this_month_usd":0}"#
+        let unknown = try JSONDecoder().decode(ProviderSummary.self, from: Data(base.utf8))
+        XCTAssertEqual(unknown.costEstimateLabel, "Cost unknown")
+        var data = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(base.utf8)) as? [String: Any])
+        data["estimated_cost_at_current_rates_usd"] = 0
+        let free = try JSONDecoder().decode(ProviderSummary.self, from: JSONSerialization.data(withJSONObject: data))
+        XCTAssertTrue(free.costEstimateLabel.contains("estimated at current prices"))
+        XCTAssertFalse(free.costEstimateLabel.contains("unknown"))
+        data["estimated_cost_at_current_rates_usd"] = 0.00000042
+        let small = try JSONDecoder().decode(ProviderSummary.self, from: JSONSerialization.data(withJSONObject: data))
+        XCTAssertTrue(small.costEstimateLabel.contains("00000042"))
+    }
+
+    @MainActor
+    func testExplicitLocalProviderDoesNotRequireRemoteModelAvailability() {
+        for mode in ["external_only", "external_first", "local_first"] {
+            XCTAssertTrue(AppState.usesLocalProvider(.init(
+                mode: mode, providerID: "provider-meta", model: "muse-spark-1.3"
+            )))
+        }
+        XCTAssertFalse(AppState.usesLocalProvider(nil))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "external_only")))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "external_only", providerID: "")))
+        XCTAssertFalse(AppState.usesLocalProvider(.init(mode: "local_only", providerID: "provider-meta")))
+    }
+
     @MainActor
     func testInferencePresentationSeparatesRemoteFailureFromLocalDestination() {
         let presentation = AppState.inferencePresentation(

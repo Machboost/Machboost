@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
+import socket
 import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
+from http.client import HTTPException
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Iterable, Optional, Sequence
 from urllib.parse import urlparse
 
 
@@ -28,6 +31,11 @@ class ProviderError(RuntimeError):
 class ProviderBudgetError(ProviderError):
     def __init__(self, message: str):
         super().__init__(message, status=429, transient=False)
+
+
+class ProviderCancelled(ProviderError):
+    def __init__(self):
+        super().__init__("provider request cancelled", status=499)
 
 
 @dataclass(frozen=True)
@@ -67,6 +75,21 @@ class ProviderResult:
     completion_tokens: int
     cost_usd: float
     latency_seconds: float
+    streamed: bool = False
+    time_to_first_token_seconds: Optional[float] = None
+    cost_estimate_known: bool = False
+
+    @property
+    def stats(self) -> dict[str, int]:
+        return {"prompt_tokens": self.prompt_tokens, "generated_tokens": self.completion_tokens}
+
+    @property
+    def text(self) -> str:
+        return str(self.response["choices"][0]["message"].get("content") or "")
+
+    @property
+    def time_to_first_token_s(self) -> Optional[float]:
+        return self.time_to_first_token_seconds
 
 
 Transport = Callable[
@@ -83,12 +106,16 @@ class ProviderStore:
         path: str | Path,
         *,
         transport: Optional[Transport] = None,
+        stream_transport: Optional[Callable[..., Iterable[dict[str, Any]]]] = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.path = Path(path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
         self.transport = transport or _default_transport
+        self.stream_transport = stream_transport or (
+            _default_stream_transport if transport is None else None
+        )
         self._secrets: dict[str, str] = {}
         self._lock = threading.RLock()
         self._connection = sqlite3.connect(
@@ -201,13 +228,83 @@ class ProviderStore:
             rows = self._connection.execute(
                 "SELECT * FROM provider_configs ORDER BY name, id"
             ).fetchall()
-        return [
+        result = [
             config.to_dict(
                 has_secret=bool(self._secret_for(config)),
                 spent_usd=self.monthly_spend(config.id),
             )
             for config in (_config_from_row(row) for row in rows)
         ]
+        for item in result:
+            config = self.get(item["id"])
+            with self._lock:
+                usage = self._connection.execute(
+                    "SELECT model, requests, prompt_tokens, completion_tokens, unpriced_requests, missing_usage_requests "
+                    "FROM provider_usage WHERE provider_id = ? AND month = ?",
+                    (config.id, _month_key(self.clock())),
+                ).fetchall()
+                priced = self._connection.execute(
+                    "SELECT model FROM provider_prices WHERE provider_id = ?", (config.id,)
+                ).fetchall()
+            by_model = {row["model"]: dict(row) for row in usage}
+            models = dict.fromkeys([*config.models, *by_model, *(row["model"] for row in priced)])
+            details = []
+            for model in models:
+                if model == "*":
+                    continue
+                input_rate, output_rate, known = self.pricing(config, model)
+                row = by_model.get(model, {})
+                prompt = int(row.get("prompt_tokens", 0))
+                completion = int(row.get("completion_tokens", 0))
+                details.append({
+                    "model": model, "pricing_configured": known,
+                    "input_cost_per_million": input_rate if known else None,
+                    "output_cost_per_million": output_rate if known else None,
+                    "requests": int(row.get("requests", 0)), "prompt_tokens": prompt,
+                    "completion_tokens": completion,
+                    "missing_usage_requests": int(row.get("missing_usage_requests", 0)),
+                    "estimated_cost_at_current_rates_usd": (
+                        (prompt * input_rate + completion * output_rate) / 1_000_000
+                        if known and not row.get("missing_usage_requests", 0) else None
+                    ),
+                })
+            item["model_usage"] = details
+            item["requests_this_month"] = sum(row["requests"] for row in details)
+            item["prompt_tokens_this_month"] = sum(row["prompt_tokens"] for row in details)
+            item["completion_tokens_this_month"] = sum(row["completion_tokens"] for row in details)
+            item["unpriced_requests"] = sum(row["unpriced_requests"] for row in usage)
+            item["missing_usage_requests"] = sum(row["missing_usage_requests"] for row in usage)
+            used_models = [row for row in details if row["requests"] > 0]
+            item["estimated_cost_at_current_rates_usd"] = (
+                sum(row["estimated_cost_at_current_rates_usd"] or 0 for row in used_models)
+                if used_models and all(row["estimated_cost_at_current_rates_usd"] is not None for row in used_models) else None
+            )
+        return result
+
+    def pricing(self, config: ProviderConfig, model: str) -> tuple[float, float, bool]:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT input_rate, output_rate FROM provider_prices WHERE provider_id = ? AND model = ?",
+                (config.id, model),
+            ).fetchone()
+        if row is not None:
+            return float(row[0]), float(row[1]), True
+        return config.input_cost_per_million, config.output_cost_per_million, bool(
+            config.input_cost_per_million or config.output_cost_per_million
+        )
+
+    def set_pricing(self, provider_id: str, model: str, input_rate: float, output_rate: float) -> None:
+        self.get(provider_id)
+        if not model.strip() or model == "*":
+            raise ValueError("an explicit model is required for pricing")
+        if any(not math.isfinite(rate) or rate < 0 for rate in (input_rate, output_rate)):
+            raise ValueError("token prices must be finite nonnegative USD amounts")
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT INTO provider_prices(provider_id, model, input_rate, output_rate) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(provider_id, model) DO UPDATE SET input_rate=excluded.input_rate, output_rate=excluded.output_rate",
+                (provider_id, model, input_rate, output_rate),
+            )
 
     def delete(self, provider_id: str) -> bool:
         with self._lock, self._connection:
@@ -275,11 +372,11 @@ class ProviderStore:
                 usage = usage if isinstance(usage, dict) else {}
                 prompt_tokens = int(usage.get("prompt_tokens") or 0)
                 completion_tokens = int(usage.get("completion_tokens") or 0)
-                cost = (
-                    prompt_tokens * config.input_cost_per_million
-                    + completion_tokens * config.output_cost_per_million
-                ) / 1_000_000.0
-                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost)
+                input_rate, output_rate, priced = self.pricing(config, model)
+                usage_known = "prompt_tokens" in usage and "completion_tokens" in usage
+                cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000
+                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost,
+                                   unpriced=not priced, missing_usage=not usage_known)
                 return ProviderResult(
                     provider_id=config.id,
                     model=model,
@@ -288,12 +385,135 @@ class ProviderStore:
                     completion_tokens=completion_tokens,
                     cost_usd=cost,
                     latency_seconds=latency,
+                    cost_estimate_known=priced and usage_known,
                 )
             except ProviderError as exc:
                 errors.append(f"{config.name}: {exc}")
                 if not exc.transient:
                     raise
         raise ProviderError("all external providers failed: " + "; ".join(errors), transient=True)
+
+    def stream_chat(
+        self,
+        payload: dict[str, Any],
+        *,
+        on_chunk: Callable[[dict[str, Any]], None],
+        provider_id: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> ProviderResult:
+        model = str(payload.get("model") or "").strip()
+        if not model:
+            raise ValueError("model is required")
+        candidates = self.candidates(model, provider_id)
+        if not candidates:
+            raise ProviderError(f"no enabled external provider supports model {model}", status=404)
+        for config in candidates:
+            if cancel_event is not None and cancel_event.is_set():
+                raise ProviderCancelled()
+            self._check_budget(config)
+            secret = self._secret_for(config)
+            if not secret:
+                raise ProviderError(f"provider {config.name} has no API key configured", status=401)
+            started = time.monotonic()
+            emitted = False
+            first_token = None
+            usage: dict[str, Any] = {}
+            content: list[str] = []
+            reasoning: list[str] = []
+            calls: dict[int, dict[str, Any]] = {}
+            finish_reason = None
+            chunks = None
+            recorded = False
+            try:
+                headers = {"Authorization": f"Bearer {secret}"}
+                request = {**payload, "stream": True, "stream_options": {"include_usage": True}}
+                if self.stream_transport is None:
+                    response = self.transport(config, "/chat/completions", {**payload, "stream": False}, headers)
+                    choice = response["choices"][0]
+                    chunks = iter([
+                        {"choices": [{"index": 0, "delta": choice["message"], "finish_reason": None}]},
+                        {"choices": [{"index": 0, "delta": {}, "finish_reason": choice.get("finish_reason") or "stop"}], "usage": response.get("usage", {})},
+                    ])
+                else:
+                    chunks = iter(self.stream_transport(config, "/chat/completions", request, headers, cancel_event))
+                for packet in chunks:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise ProviderCancelled()
+                    if packet.get("error"):
+                        raise ProviderError("upstream stream error: " + str(packet["error"]), transient=True)
+                    if isinstance(packet.get("usage"), dict):
+                        usage = packet["usage"]
+                    for choice in packet.get("choices") or []:
+                        if choice.get("index", 0) != 0:
+                            continue
+                        delta = choice.get("delta") or {}
+                        text = delta.get("content") or ""
+                        thought = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                        if isinstance(text, str):
+                            content.append(text)
+                        if isinstance(thought, str):
+                            reasoning.append(thought)
+                        for ordinal, call in enumerate(delta.get("tool_calls") or []):
+                            index = int(call.get("index", ordinal))
+                            accumulated = calls.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            if call.get("id"):
+                                accumulated["id"] = call["id"]
+                            function = call.get("function") or {}
+                            for field in ("name", "arguments"):
+                                fragment = function.get(field)
+                                if isinstance(fragment, str):
+                                    accumulated["function"][field] += fragment
+                                elif field == "arguments" and isinstance(fragment, dict):
+                                    accumulated["function"][field] += json.dumps(fragment)
+                        if first_token is None and (text or thought or delta.get("tool_calls")):
+                            first_token = time.monotonic() - started
+                        if choice.get("finish_reason") is not None:
+                            finish_reason = choice["finish_reason"]
+                    # Once anything has been forwarded, never replay on another provider.
+                    emitted = True
+                    on_chunk(packet)
+                if finish_reason is None:
+                    raise ProviderError("upstream stream ended before a completion marker", transient=True)
+                message: dict[str, Any] = {"role": "assistant", "content": "".join(content)}
+                if reasoning:
+                    message["reasoning_content"] = "".join(reasoning)
+                if calls:
+                    message["tool_calls"] = [calls[key] for key in sorted(calls)]
+                prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or 0)
+                input_rate, output_rate, priced = self.pricing(config, model)
+                usage_known = "prompt_tokens" in usage and "completion_tokens" in usage
+                cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000
+                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost,
+                                   unpriced=not priced, missing_usage=not usage_known)
+                recorded = True
+                return ProviderResult(
+                    provider_id=config.id, model=model,
+                    response={"choices": [{"message": message, "finish_reason": finish_reason}], "usage": usage},
+                    prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                    cost_usd=cost, latency_seconds=time.monotonic() - started,
+                    streamed=self.stream_transport is not None,
+                    time_to_first_token_seconds=first_token,
+                    cost_estimate_known=priced and usage_known,
+                )
+            except ProviderError as exc:
+                if emitted or not exc.transient or config is candidates[-1]:
+                    raise
+            finally:
+                if emitted and not recorded:
+                    input_rate, output_rate, priced = self.pricing(config, model)
+                    prompt = int(usage.get("prompt_tokens") or 0)
+                    completion = int(usage.get("completion_tokens") or 0)
+                    self._record_usage(
+                        config.id, model, prompt, completion,
+                        (prompt * input_rate + completion * output_rate) / 1_000_000,
+                        unpriced=not priced,
+                        missing_usage="prompt_tokens" not in usage or "completion_tokens" not in usage,
+                    )
+                close = getattr(chunks, "close", None)
+                if close is not None:
+                    close()
+        raise ProviderError("all external providers failed", transient=True)
 
     def monthly_spend(self, provider_id: str, *, month: Optional[str] = None) -> float:
         month = month or _month_key(self.clock())
@@ -352,19 +572,24 @@ class ProviderStore:
         prompt_tokens: int,
         completion_tokens: int,
         cost_usd: float,
+        *,
+        unpriced: bool = False,
+        missing_usage: bool = False,
     ) -> None:
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO provider_usage (
                     provider_id, month, model, requests, prompt_tokens,
-                    completion_tokens, cost_usd, updated_at
-                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+                    completion_tokens, cost_usd, updated_at, unpriced_requests, missing_usage_requests
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(provider_id, month, model) DO UPDATE SET
                     requests = requests + 1,
                     prompt_tokens = prompt_tokens + excluded.prompt_tokens,
                     completion_tokens = completion_tokens + excluded.completion_tokens,
                     cost_usd = cost_usd + excluded.cost_usd,
+                    unpriced_requests = unpriced_requests + excluded.unpriced_requests,
+                    missing_usage_requests = missing_usage_requests + excluded.missing_usage_requests,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -375,6 +600,8 @@ class ProviderStore:
                     max(0, int(completion_tokens)),
                     max(0.0, float(cost_usd)),
                     self.clock(),
+                    int(unpriced),
+                    int(missing_usage),
                 ),
             )
 
@@ -408,8 +635,23 @@ class ProviderStore:
                     PRIMARY KEY(provider_id, month, model),
                     FOREIGN KEY(provider_id) REFERENCES provider_configs(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS provider_prices (
+                    provider_id TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    input_rate REAL NOT NULL,
+                    output_rate REAL NOT NULL,
+                    PRIMARY KEY(provider_id, model),
+                    FOREIGN KEY(provider_id) REFERENCES provider_configs(id) ON DELETE CASCADE
+                );
                 """
             )
+            columns = {row[1] for row in self._connection.execute("PRAGMA table_info(provider_usage)")}
+            if "unpriced_requests" not in columns:
+                self._connection.execute("ALTER TABLE provider_usage ADD COLUMN unpriced_requests INTEGER NOT NULL DEFAULT 0")
+                self._connection.execute("UPDATE provider_usage SET unpriced_requests=requests WHERE cost_usd=0")
+            if "missing_usage_requests" not in columns:
+                self._connection.execute("ALTER TABLE provider_usage ADD COLUMN missing_usage_requests INTEGER NOT NULL DEFAULT 0")
+                self._connection.execute("UPDATE provider_usage SET missing_usage_requests=requests WHERE prompt_tokens=0 AND completion_tokens=0")
 
 
 def route_with_fallback(
@@ -454,6 +696,107 @@ def _can_fallback(exc: Exception) -> bool:
     return bool(getattr(exc, "transient", False))
 
 
+def _provider_endpoint(config: ProviderConfig, path: str) -> str:
+    base = urlparse(config.base_url)
+    prefix = base.path.rstrip("/")
+    if not prefix.endswith("/v1"):
+        prefix += "/v1"
+    return base._replace(path=prefix + path, fragment="").geturl()
+
+
+def _default_stream_transport(
+    config: ProviderConfig,
+    path: str,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    cancel_event: Optional[threading.Event],
+) -> Iterable[dict[str, Any]]:
+    request = urllib.request.Request(
+        _provider_endpoint(config, path), data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream", **headers},
+        method="POST",
+    )
+    finished = threading.Event()
+    try:
+        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+            if cancel_event is not None:
+                def close_when_cancelled() -> None:
+                    while not finished.wait(0.05):
+                        if cancel_event.is_set():
+                            # Closing a buffered reader alone can block behind its
+                            # current read. Shut down the stdlib socket first.
+                            raw = getattr(getattr(response, "fp", None), "raw", None)
+                            connection = getattr(raw, "_sock", None)
+                            if connection is not None:
+                                try:
+                                    connection.shutdown(socket.SHUT_RDWR)
+                                except OSError:
+                                    pass
+                            else:
+                                response.close()
+                            return
+                threading.Thread(target=close_when_cancelled, daemon=True).start()
+            data: list[str] = []
+            event_size = 0
+            first_line = True
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise ProviderCancelled()
+                line = response.readline(1_048_577)
+                if cancel_event is not None and cancel_event.is_set():
+                    raise ProviderCancelled()
+                if len(line) > 1_048_576:
+                    raise ProviderError("upstream SSE line exceeds size limit")
+                decoded = line.decode("utf-8").rstrip("\r\n")
+                if first_line:
+                    decoded = decoded.removeprefix("\ufeff")
+                    first_line = False
+                if decoded.startswith("data:"):
+                    data.append(decoded[5:].removeprefix(" "))
+                    event_size += len(line)
+                    if event_size > 2_097_152:
+                        raise ProviderError("upstream SSE event exceeds size limit")
+                if not decoded or not line:
+                    if data:
+                        event = "\n".join(data)
+                        data = []
+                        event_size = 0
+                        if event.strip() == "[DONE]":
+                            return
+                        packet = json.loads(event)
+                        if not isinstance(packet, dict):
+                            raise ProviderError("upstream SSE event must be a JSON object")
+                        yield packet
+                    if not line:
+                        return
+    except ProviderError:
+        raise
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        if exc.code == 400 and "stream_options" in payload:
+            try:
+                error = json.loads(detail).get("error", {})
+            except (json.JSONDecodeError, AttributeError):
+                error = {}
+            if isinstance(error, dict) and error.get("param") in {
+                "stream_options", "stream_options.include_usage"
+            }:
+                # Some compatible APIs stream but do not implement usage events.
+                compatible = {key: value for key, value in payload.items() if key != "stream_options"}
+                yield from _default_stream_transport(config, path, compatible, headers, cancel_event)
+                return
+        raise ProviderError(f"upstream HTTP {exc.code}: {detail}", status=exc.code,
+                            transient=exc.code in TRANSIENT_STATUS_CODES) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ProviderError("upstream returned invalid SSE JSON", transient=True) from exc
+    except (OSError, ValueError, HTTPException, urllib.error.URLError) as exc:
+        if cancel_event is not None and cancel_event.is_set():
+            raise ProviderCancelled() from exc
+        raise ProviderError(f"upstream stream connection failed: {exc}", transient=True) from exc
+    finally:
+        finished.set()
+
+
 def _default_transport(
     config: ProviderConfig,
     path: str,
@@ -461,7 +804,7 @@ def _default_transport(
     headers: dict[str, str],
 ) -> dict[str, Any]:
     request = urllib.request.Request(
-        config.base_url + "/v1" + path,
+        _provider_endpoint(config, path),
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", **headers},
         method="POST",

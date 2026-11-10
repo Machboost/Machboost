@@ -51,7 +51,7 @@ from .ollama_compat import (
     truncate_prompt,
     validate_structured_output,
 )
-from .providers import ProviderError, ProviderResult, ProviderStore, route_with_fallback
+from .providers import ProviderCancelled, ProviderError, ProviderResult, ProviderStore, route_with_fallback
 from .protocols import (
     anthropic_body,
     anthropic_cache_affinity,
@@ -2121,19 +2121,161 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
         messages: Sequence[dict[str, Any]],
         provider_id: Optional[str],
         provider_model: Optional[str] = None,
+        on_chunk: Optional[Callable[[dict[str, Any]], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> ProviderResult:
         if self.providers is None:
             raise ValueError("external providers require serving with --team-db")
+        # Native clients send Ollama lifecycle/options fields. External APIs
+        # must receive Chat Completions fields, not the original local payload.
+        allowed = {
+            "model", "temperature", "top_p", "n", "stop", "max_tokens",
+            "max_completion_tokens", "presence_penalty", "frequency_penalty",
+            "logit_bias", "logprobs", "top_logprobs", "seed", "response_format",
+            "tools", "tool_choice", "parallel_tool_calls", "user", "reasoning_effort",
+        }
         upstream = {
             key: value
             for key, value in payload.items()
-            if key not in {"machboost", "machboost_options", "workspace_id", "workspace_query"}
+            if key in allowed and value is not None
         }
+        options = payload.get("options")
+        if isinstance(options, dict):
+            for name in ("temperature", "top_p", "seed", "stop"):
+                if name not in upstream and options.get(name) is not None:
+                    upstream[name] = options[name]
+            limit = options.get("num_predict")
+            if (
+                "max_tokens" not in upstream and "max_completion_tokens" not in upstream
+                and isinstance(limit, int) and not isinstance(limit, bool) and limit > 0
+            ):
+                upstream["max_tokens"] = limit
         upstream["messages"] = [dict(message) for message in messages]
+        for message in upstream["messages"]:
+            if message.get("tool_calls"):
+                calls = []
+                for call in message["tool_calls"]:
+                    function = dict(call.get("function") or {})
+                    if not isinstance(function.get("arguments"), str):
+                        function["arguments"] = json.dumps(function.get("arguments") or {})
+                    calls.append({**call, "type": call.get("type") or "function", "function": function})
+                message["tool_calls"] = calls
         upstream["stream"] = False
         if provider_model:
             upstream["model"] = provider_model
+        if on_chunk is not None:
+            return self.providers.stream_chat(
+                upstream, provider_id=provider_id, on_chunk=on_chunk,
+                cancel_event=cancel_event,
+            )
         return self.providers.chat(upstream, provider_id=provider_id)
+
+    def send_external_chat_stream(
+        self, payload: dict[str, Any], *, messages: Sequence[dict[str, Any]],
+        provider_id: Optional[str], provider_model: Optional[str], request_id: str,
+        model: str, workspace: Any, memory_context: Any, user_query: str,
+        openai: bool,
+    ) -> None:
+        started = False
+
+        def start() -> None:
+            nonlocal started
+            if not started:
+                self.start_stream("text/event-stream" if openai else "application/x-ndjson")
+                started = True
+
+        def emit(packet: dict[str, Any]) -> None:
+            choices = packet.get("choices") or []
+            if not choices:
+                return
+            if openai:
+                outgoing = []
+                for choice in choices:
+                    delta = dict(choice.get("delta") or {})
+                    if "reasoning_content" not in delta and isinstance(delta.get("reasoning"), str):
+                        delta["reasoning_content"] = delta.pop("reasoning")
+                    if delta:
+                        outgoing.append({"index": choice.get("index", 0), "delta": delta, "finish_reason": None})
+                if outgoing:
+                    start()
+                    self.write_sse({"id": request_id, "object": "chat.completion.chunk",
+                                    "created": int(time.time()), "model": model, "choices": outgoing})
+            else:
+                for choice in choices:
+                    if choice.get("index", 0) != 0:
+                        continue
+                    delta = choice.get("delta") or {}
+                    content = delta.get("content") or ""
+                    thinking = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                    if content or thinking:
+                        start()
+                        message = {"role": "assistant", "content": content}
+                        if thinking:
+                            message["thinking"] = thinking
+                        self.write_json_line({"request_id": request_id, "model": model,
+                                              "created_at": utc_timestamp(), "message": message, "done": False})
+
+        def generate(cancel_event: threading.Event) -> ProviderResult:
+            try:
+                return self.external_chat(
+                    payload, messages=messages, provider_id=provider_id,
+                    provider_model=provider_model, on_chunk=emit, cancel_event=cancel_event,
+                )
+            except ProviderCancelled as exc:
+                raise RequestCancelled() from exc
+
+        try:
+            external = self.run_traced_operation(
+                request_id, "chat", model, generate, input_data=messages,
+            )
+        except Exception as exc:
+            if not started and not isinstance(exc, RequestCancelled):
+                raise
+            start()
+            if openai:
+                if isinstance(exc, RequestCancelled):
+                    self.write_sse({"id": request_id, "object": "chat.completion.chunk", "model": model,
+                                    "choices": [{"index": 0, "delta": {}, "finish_reason": "cancelled"}]})
+                else:
+                    self.write_sse({"error": {"message": str(exc), "type": "provider_error"}})
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+            else:
+                self.write_json_line({"request_id": request_id, "model": model, "done": True,
+                                      **({"done_reason": "cancelled"} if isinstance(exc, RequestCancelled)
+                                         else {"error": str(exc)})})
+            return
+        content, _, tool_calls = openai_response_message(external.response)
+        self.remember_exchange(memory_context, workspace, user_text=user_query, assistant_text=content)
+        finish = external.response["choices"][0].get("finish_reason") or "stop"
+        metadata = {
+            **machboost_context_result(workspace, memory_context), "backend": "external",
+            "time_to_first_token_seconds": external.time_to_first_token_seconds,
+            "route": {"source": "external", "provider_id": external.provider_id,
+                      "latency_seconds": external.latency_seconds,
+                      "cost_usd": external.cost_usd if external.cost_estimate_known else None,
+                      "buffered_upstream": not external.streamed},
+        }
+        start()
+        if openai:
+            self.write_sse({"id": request_id, "object": "chat.completion.chunk", "created": int(time.time()),
+                            "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
+                            "usage": external.response.get("usage", {}), "machboost": metadata})
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        else:
+            if tool_calls:
+                self.write_json_line({"request_id": request_id, "model": model, "created_at": utc_timestamp(),
+                                      "message": {"role": "assistant", "content": "", "tool_calls": tool_calls},
+                                      "done": False})
+            self.write_json_line({
+                "request_id": request_id, "model": model, "created_at": utc_timestamp(),
+                "message": {"role": "assistant", "content": ""}, "done": True, "done_reason": finish,
+                "total_duration": int(external.latency_seconds * 1e9), "load_duration": 0,
+                "prompt_eval_count": external.prompt_tokens, "prompt_eval_duration": 0,
+                "eval_count": external.completion_tokens, "eval_duration": int(external.latency_seconds * 1e9),
+                "machboost": metadata,
+            })
 
     def exact_cache_put(
         self,
@@ -2657,6 +2799,18 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 self.providers.set_secret(provider_id, payload.get("api_key"))
                 self.send_json({"provider_id": provider_id, "has_secret": bool(payload.get("api_key"))})
                 return
+            if path == "/api/providers/pricing":
+                if not self.require_team_admin():
+                    return
+                provider_id = required_string(payload, "provider_id")
+                self.providers.set_pricing(
+                    provider_id, required_string(payload, "model"),
+                    float(payload["input_cost_per_million"]),
+                    float(payload["output_cost_per_million"]),
+                )
+                listed = next(item for item in self.providers.list() if item["id"] == provider_id)
+                self.send_json({"schema": "machboost.provider.v1", "provider": listed})
+                return
             if path == "/api/providers/delete":
                 if not self.require_team_admin():
                     return
@@ -3147,34 +3301,18 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                         "source": "external",
                         "provider_id": external.provider_id,
                         "latency_seconds": external.latency_seconds,
-                        "cost_usd": external.cost_usd,
+                        "cost_usd": external.cost_usd if external.cost_estimate_known else None,
                         "buffered_upstream": True,
                     },
                 },
             }
 
-        def send_external_stream(external: ProviderResult) -> None:
-            body = external_response(external)
-            message = dict(body["message"])
-            self.remember_exchange(
-                memory_context,
-                workspace,
-                user_text=user_query,
-                assistant_text=str(message.get("content") or ""),
+        def send_external_stream() -> None:
+            self.send_external_chat_stream(
+                payload, messages=messages, provider_id=provider_id, provider_model=provider_model,
+                request_id=request_id, model=model, workspace=workspace,
+                memory_context=memory_context, user_query=user_query, openai=False,
             )
-            self.start_stream("application/x-ndjson")
-            if message.get("content") or message.get("thinking") or message.get("tool_calls"):
-                self.write_json_line(
-                    {
-                        "request_id": request_id,
-                        "model": model,
-                        "created_at": body["created_at"],
-                        "message": message,
-                        "done": False,
-                    }
-                )
-            body["message"] = {"role": "assistant", "content": ""}
-            self.write_json_line(body)
 
         if not bool(payload.get("stream", True)):
             cached = self.exact_cache_get(memory_context, model=model, payload=payload)
@@ -3256,17 +3394,11 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
         if route_mode in {"external_first", "external_only"}:
             try:
-                external = self.external_chat(
-                    payload,
-                    messages=messages,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                )
+                send_external_stream()
             except ProviderError as exc:
                 if route_mode == "external_only" or not exc.transient:
                     raise
             else:
-                send_external_stream(external)
                 return
 
         stream_started = False
@@ -3343,13 +3475,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 and exc.reason
                 in {"queue_full", "queue_timeout", "request_timeout", "server_unavailable"}
             ):
-                external = self.external_chat(
-                    payload,
-                    messages=messages,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                )
-                send_external_stream(external)
+                send_external_stream()
                 return
             raise
         except RequestCancelled:
@@ -4455,7 +4581,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                             "source": "external",
                             "provider_id": external.provider_id,
                             "latency_seconds": external.latency_seconds,
-                            "cost_usd": external.cost_usd,
+                            "cost_usd": external.cost_usd if external.cost_estimate_known else None,
                         },
                     }
                 )
@@ -4512,65 +4638,20 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
 
         route_mode, provider_id, provider_model = self.route_config(payload)
 
-        def send_external_stream(external: ProviderResult) -> None:
-            content = openai_response_text(external.response)
-            self.remember_exchange(
-                memory_context,
-                workspace,
-                user_text=user_query,
-                assistant_text=content,
+        def send_external_stream() -> None:
+            self.send_external_chat_stream(
+                payload, messages=messages, provider_id=provider_id, provider_model=provider_model,
+                request_id=request_id, model=model, workspace=workspace,
+                memory_context=memory_context, user_query=user_query, openai=True,
             )
-            self.start_stream("text/event-stream")
-            self.write_sse(
-                {
-                    "id": request_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"role": "assistant", "content": content},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-            )
-            self.write_sse(
-                {
-                    "id": request_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": model,
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                    "machboost": {
-                        **machboost_context_result(workspace, memory_context),
-                        "route": {
-                            "source": "external",
-                            "provider_id": external.provider_id,
-                            "latency_seconds": external.latency_seconds,
-                            "cost_usd": external.cost_usd,
-                            "buffered_upstream": True,
-                        },
-                    },
-                }
-            )
-            self.wfile.write(b"data: [DONE]\n\n")
-            self.wfile.flush()
 
         if route_mode in {"external_first", "external_only"}:
             try:
-                external = self.external_chat(
-                    payload,
-                    messages=messages,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                )
+                send_external_stream()
             except ProviderError as exc:
                 if route_mode == "external_only" or not exc.transient:
                     raise
             else:
-                send_external_stream(external)
                 return
 
         stream_started = False
@@ -4637,13 +4718,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 and exc.reason
                 in {"queue_full", "queue_timeout", "request_timeout", "server_unavailable"}
             ):
-                external = self.external_chat(
-                    payload,
-                    messages=messages,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                )
-                send_external_stream(external)
+                send_external_stream()
                 return
             raise
         except RequestCancelled:
@@ -6417,7 +6492,9 @@ def stream_remainder(final: str, streamed: str) -> str:
     return ""
 
 
-def ollama_tool_calls(calls: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def ollama_tool_calls(
+    calls: Sequence[dict[str, Any]], *, preserve_ids: bool = False
+) -> list[dict[str, Any]]:
     result = []
     for call in calls:
         function = dict(call.get("function") or {})
@@ -6435,6 +6512,9 @@ def ollama_tool_calls(calls: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             }
         )
+        if preserve_ids and call.get("id"):
+            result[-1]["id"] = call["id"]
+            result[-1]["type"] = call.get("type") or "function"
     return result
 
 
@@ -6482,7 +6562,7 @@ def openai_response_message(
     return (
         content if isinstance(content, str) else "",
         thinking if isinstance(thinking, str) else "",
-        ollama_tool_calls(calls if isinstance(calls, list) else []),
+        ollama_tool_calls(calls if isinstance(calls, list) else [], preserve_ids=True),
     )
 
 

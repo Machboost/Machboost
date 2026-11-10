@@ -64,6 +64,9 @@ final class AppState {
     private(set) var memories: [MemorySummary] = []
     private(set) var cacheMetrics: CacheMetrics?
     private(set) var providers: [ProviderSummary] = []
+    private(set) var isRefreshingProviders = false
+    private(set) var providerError: String?
+    private var providerRefreshPending = false
     private(set) var mcpServers: [MCPServerSummary] = []
     private(set) var skills: [SkillSummary] = []
     private(set) var lastCreatedTeamToken: String?
@@ -459,30 +462,52 @@ final class AppState {
         }
     }
 
+    func refreshProviders() async {
+        guard serverIsRunning else { return }
+        if isRefreshingProviders {
+            providerRefreshPending = true
+            return
+        }
+        isRefreshingProviders = true
+        defer {
+            isRefreshingProviders = false
+            if providerRefreshPending {
+                providerRefreshPending = false
+                Task { await refreshProviders() }
+            }
+        }
+        do {
+            providers = try await api.providers()
+            if !usesUITestAPI {
+                var restored = false
+                for provider in providers where !provider.hasSecret {
+                    guard let secret = await KeychainStore.providerSecretAsync(id: provider.id) else { continue }
+                    try await api.setProviderSecret(id: provider.id, apiKey: secret)
+                    restored = true
+                }
+                if restored { providers = try await api.providers() }
+            }
+            providerError = nil
+        } catch {
+            providerError = error.localizedDescription
+        }
+    }
+
     func refreshMemoryAndProviders() async {
         guard serverIsRunning else { return }
+        await refreshProviders()
         do {
             async let memories = api.memories(workspaceID: nil)
             async let metrics = api.cacheMetrics()
-            async let providers = api.providers()
             async let extensions = api.extensions()
-            let values = try await (memories, metrics, providers, extensions)
+            let values = try await (memories, metrics, extensions)
             self.memories = values.0
             cacheMetrics = values.1
-            self.providers = values.2
-            mcpServers = values.3.mcpServers
-            skills = values.3.skills
-            if !usesUITestAPI {
-                for provider in values.2 where !provider.hasSecret {
-                    guard let secret = await KeychainStore.providerSecretAsync(id: provider.id)
-                    else { continue }
-                    try await api.setProviderSecret(id: provider.id, apiKey: secret)
-                }
-            }
+            mcpServers = values.2.mcpServers
+            skills = values.2.skills
         } catch MachBoostAPIError.server(status: 404, message: _) {
             memories = []
             cacheMetrics = nil
-            providers = []
             mcpServers = []
             skills = []
         } catch {
@@ -631,6 +656,11 @@ final class AppState {
         } catch {
             presentedError = error.localizedDescription
         }
+    }
+
+    func setProviderPricing(id: String, model: String, inputRate: Double, outputRate: Double) async throws {
+        try await api.setProviderPricing(id: id, model: model, inputRate: inputRate, outputRate: outputRate)
+        await refreshProviders()
     }
 
     func createTeamKey(
@@ -952,7 +982,8 @@ final class AppState {
     ) throws -> AsyncThrowingStream<ChatEvent, Error> {
         let candidates = try inferenceCandidates(
             for: request.model,
-            preferredHostID: preferredHostID
+            preferredHostID: preferredHostID,
+            route: request.machboost?.route
         )
         let initialCandidate = candidates[0]
         beginRequestRoute(
@@ -1401,9 +1432,12 @@ final class AppState {
 
     private func inferenceCandidates(
         for model: String,
-        preferredHostID: String? = nil
+        preferredHostID: String? = nil,
+        route: ChatRequest.Extensions.Route? = nil
     ) throws -> [InferenceCandidate] {
-        guard inferenceMode == .team else {
+        // Provider IDs belong to this daemon, not to a remote host's registry.
+        // API-only requests do not need locally cached model weights.
+        guard inferenceMode == .team && !Self.usesLocalProvider(route) else {
             return [
                 InferenceCandidate(
                     score: 0,
@@ -1495,6 +1529,13 @@ final class AppState {
             }
             return $0.score < $1.score
         }
+    }
+
+    static func usesLocalProvider(_ route: ChatRequest.Extensions.Route?) -> Bool {
+        guard let route, let providerID = route.providerID, !providerID.isEmpty else {
+            return false
+        }
+        return ["external_only", "external_first", "local_first"].contains(route.mode)
     }
 
     private func beginRequestRoute(requestID: String, candidate: InferenceCandidate) {
