@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import socket
@@ -76,6 +77,7 @@ class ProviderResult:
     latency_seconds: float
     streamed: bool = False
     time_to_first_token_seconds: Optional[float] = None
+    cost_estimate_known: bool = False
 
     @property
     def stats(self) -> dict[str, int]:
@@ -226,13 +228,83 @@ class ProviderStore:
             rows = self._connection.execute(
                 "SELECT * FROM provider_configs ORDER BY name, id"
             ).fetchall()
-        return [
+        result = [
             config.to_dict(
                 has_secret=bool(self._secret_for(config)),
                 spent_usd=self.monthly_spend(config.id),
             )
             for config in (_config_from_row(row) for row in rows)
         ]
+        for item in result:
+            config = self.get(item["id"])
+            with self._lock:
+                usage = self._connection.execute(
+                    "SELECT model, requests, prompt_tokens, completion_tokens, unpriced_requests, missing_usage_requests "
+                    "FROM provider_usage WHERE provider_id = ? AND month = ?",
+                    (config.id, _month_key(self.clock())),
+                ).fetchall()
+                priced = self._connection.execute(
+                    "SELECT model FROM provider_prices WHERE provider_id = ?", (config.id,)
+                ).fetchall()
+            by_model = {row["model"]: dict(row) for row in usage}
+            models = dict.fromkeys([*config.models, *by_model, *(row["model"] for row in priced)])
+            details = []
+            for model in models:
+                if model == "*":
+                    continue
+                input_rate, output_rate, known = self.pricing(config, model)
+                row = by_model.get(model, {})
+                prompt = int(row.get("prompt_tokens", 0))
+                completion = int(row.get("completion_tokens", 0))
+                details.append({
+                    "model": model, "pricing_configured": known,
+                    "input_cost_per_million": input_rate if known else None,
+                    "output_cost_per_million": output_rate if known else None,
+                    "requests": int(row.get("requests", 0)), "prompt_tokens": prompt,
+                    "completion_tokens": completion,
+                    "missing_usage_requests": int(row.get("missing_usage_requests", 0)),
+                    "estimated_cost_at_current_rates_usd": (
+                        (prompt * input_rate + completion * output_rate) / 1_000_000
+                        if known and not row.get("missing_usage_requests", 0) else None
+                    ),
+                })
+            item["model_usage"] = details
+            item["requests_this_month"] = sum(row["requests"] for row in details)
+            item["prompt_tokens_this_month"] = sum(row["prompt_tokens"] for row in details)
+            item["completion_tokens_this_month"] = sum(row["completion_tokens"] for row in details)
+            item["unpriced_requests"] = sum(row["unpriced_requests"] for row in usage)
+            item["missing_usage_requests"] = sum(row["missing_usage_requests"] for row in usage)
+            used_models = [row for row in details if row["requests"] > 0]
+            item["estimated_cost_at_current_rates_usd"] = (
+                sum(row["estimated_cost_at_current_rates_usd"] or 0 for row in used_models)
+                if used_models and all(row["estimated_cost_at_current_rates_usd"] is not None for row in used_models) else None
+            )
+        return result
+
+    def pricing(self, config: ProviderConfig, model: str) -> tuple[float, float, bool]:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT input_rate, output_rate FROM provider_prices WHERE provider_id = ? AND model = ?",
+                (config.id, model),
+            ).fetchone()
+        if row is not None:
+            return float(row[0]), float(row[1]), True
+        return config.input_cost_per_million, config.output_cost_per_million, bool(
+            config.input_cost_per_million or config.output_cost_per_million
+        )
+
+    def set_pricing(self, provider_id: str, model: str, input_rate: float, output_rate: float) -> None:
+        self.get(provider_id)
+        if not model.strip() or model == "*":
+            raise ValueError("an explicit model is required for pricing")
+        if any(not math.isfinite(rate) or rate < 0 for rate in (input_rate, output_rate)):
+            raise ValueError("token prices must be finite nonnegative USD amounts")
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT INTO provider_prices(provider_id, model, input_rate, output_rate) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(provider_id, model) DO UPDATE SET input_rate=excluded.input_rate, output_rate=excluded.output_rate",
+                (provider_id, model, input_rate, output_rate),
+            )
 
     def delete(self, provider_id: str) -> bool:
         with self._lock, self._connection:
@@ -300,11 +372,11 @@ class ProviderStore:
                 usage = usage if isinstance(usage, dict) else {}
                 prompt_tokens = int(usage.get("prompt_tokens") or 0)
                 completion_tokens = int(usage.get("completion_tokens") or 0)
-                cost = (
-                    prompt_tokens * config.input_cost_per_million
-                    + completion_tokens * config.output_cost_per_million
-                ) / 1_000_000.0
-                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost)
+                input_rate, output_rate, priced = self.pricing(config, model)
+                usage_known = "prompt_tokens" in usage and "completion_tokens" in usage
+                cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000
+                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost,
+                                   unpriced=not priced, missing_usage=not usage_known)
                 return ProviderResult(
                     provider_id=config.id,
                     model=model,
@@ -313,6 +385,7 @@ class ProviderStore:
                     completion_tokens=completion_tokens,
                     cost_usd=cost,
                     latency_seconds=latency,
+                    cost_estimate_known=priced and usage_known,
                 )
             except ProviderError as exc:
                 errors.append(f"{config.name}: {exc}")
@@ -350,6 +423,7 @@ class ProviderStore:
             calls: dict[int, dict[str, Any]] = {}
             finish_reason = None
             chunks = None
+            recorded = False
             try:
                 headers = {"Authorization": f"Bearer {secret}"}
                 request = {**payload, "stream": True, "stream_options": {"include_usage": True}}
@@ -407,8 +481,12 @@ class ProviderStore:
                     message["tool_calls"] = [calls[key] for key in sorted(calls)]
                 prompt_tokens = int(usage.get("prompt_tokens") or 0)
                 completion_tokens = int(usage.get("completion_tokens") or 0)
-                cost = (prompt_tokens * config.input_cost_per_million + completion_tokens * config.output_cost_per_million) / 1_000_000
-                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost)
+                input_rate, output_rate, priced = self.pricing(config, model)
+                usage_known = "prompt_tokens" in usage and "completion_tokens" in usage
+                cost = (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000
+                self._record_usage(config.id, model, prompt_tokens, completion_tokens, cost,
+                                   unpriced=not priced, missing_usage=not usage_known)
+                recorded = True
                 return ProviderResult(
                     provider_id=config.id, model=model,
                     response={"choices": [{"message": message, "finish_reason": finish_reason}], "usage": usage},
@@ -416,11 +494,22 @@ class ProviderStore:
                     cost_usd=cost, latency_seconds=time.monotonic() - started,
                     streamed=self.stream_transport is not None,
                     time_to_first_token_seconds=first_token,
+                    cost_estimate_known=priced and usage_known,
                 )
             except ProviderError as exc:
                 if emitted or not exc.transient or config is candidates[-1]:
                     raise
             finally:
+                if emitted and not recorded:
+                    input_rate, output_rate, priced = self.pricing(config, model)
+                    prompt = int(usage.get("prompt_tokens") or 0)
+                    completion = int(usage.get("completion_tokens") or 0)
+                    self._record_usage(
+                        config.id, model, prompt, completion,
+                        (prompt * input_rate + completion * output_rate) / 1_000_000,
+                        unpriced=not priced,
+                        missing_usage="prompt_tokens" not in usage or "completion_tokens" not in usage,
+                    )
                 close = getattr(chunks, "close", None)
                 if close is not None:
                     close()
@@ -483,19 +572,24 @@ class ProviderStore:
         prompt_tokens: int,
         completion_tokens: int,
         cost_usd: float,
+        *,
+        unpriced: bool = False,
+        missing_usage: bool = False,
     ) -> None:
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO provider_usage (
                     provider_id, month, model, requests, prompt_tokens,
-                    completion_tokens, cost_usd, updated_at
-                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+                    completion_tokens, cost_usd, updated_at, unpriced_requests, missing_usage_requests
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(provider_id, month, model) DO UPDATE SET
                     requests = requests + 1,
                     prompt_tokens = prompt_tokens + excluded.prompt_tokens,
                     completion_tokens = completion_tokens + excluded.completion_tokens,
                     cost_usd = cost_usd + excluded.cost_usd,
+                    unpriced_requests = unpriced_requests + excluded.unpriced_requests,
+                    missing_usage_requests = missing_usage_requests + excluded.missing_usage_requests,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -506,6 +600,8 @@ class ProviderStore:
                     max(0, int(completion_tokens)),
                     max(0.0, float(cost_usd)),
                     self.clock(),
+                    int(unpriced),
+                    int(missing_usage),
                 ),
             )
 
@@ -539,8 +635,23 @@ class ProviderStore:
                     PRIMARY KEY(provider_id, month, model),
                     FOREIGN KEY(provider_id) REFERENCES provider_configs(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS provider_prices (
+                    provider_id TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    input_rate REAL NOT NULL,
+                    output_rate REAL NOT NULL,
+                    PRIMARY KEY(provider_id, model),
+                    FOREIGN KEY(provider_id) REFERENCES provider_configs(id) ON DELETE CASCADE
+                );
                 """
             )
+            columns = {row[1] for row in self._connection.execute("PRAGMA table_info(provider_usage)")}
+            if "unpriced_requests" not in columns:
+                self._connection.execute("ALTER TABLE provider_usage ADD COLUMN unpriced_requests INTEGER NOT NULL DEFAULT 0")
+                self._connection.execute("UPDATE provider_usage SET unpriced_requests=requests WHERE cost_usd=0")
+            if "missing_usage_requests" not in columns:
+                self._connection.execute("ALTER TABLE provider_usage ADD COLUMN missing_usage_requests INTEGER NOT NULL DEFAULT 0")
+                self._connection.execute("UPDATE provider_usage SET missing_usage_requests=requests WHERE prompt_tokens=0 AND completion_tokens=0")
 
 
 def route_with_fallback(
