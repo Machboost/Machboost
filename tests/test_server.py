@@ -4042,6 +4042,25 @@ class TeamGatewayHTTPTests(unittest.TestCase):
         self.assertEqual(providers["providers"][0]["id"], "fallback")
         self.assertEqual(usage["usage"][0]["requests"], 1)
 
+    def test_provider_pricing_update_preserves_credentials_and_models(self) -> None:
+        self.request("/api/providers", {
+            "id": "pricing", "name": "Pricing", "base_url": "https://example.com/v1",
+            "models": ["paid-model"], "api_key": "test-key",
+        })
+        _, updated = self.request("/api/providers/pricing", {
+            "provider_id": "pricing", "model": "paid-model",
+            "input_cost_per_million": 2.0, "output_cost_per_million": 8.0,
+        })
+        self.assertTrue(updated["provider"]["has_secret"])
+        self.assertEqual(updated["provider"]["models"], ["paid-model"])
+        self.assertEqual(updated["provider"]["model_usage"][0]["input_cost_per_million"], 2)
+        with self.assertRaises(HTTPError) as denied:
+            self.request("/api/providers/pricing", {
+                "provider_id": "pricing", "model": "paid-model",
+                "input_cost_per_million": 10, "output_cost_per_million": 10,
+            }, token="invalid-token")
+        self.assertEqual(denied.exception.code, 401)
+
     def test_ollama_chat_can_route_directly_to_external_provider(self) -> None:
         self.request(
             "/api/providers",
