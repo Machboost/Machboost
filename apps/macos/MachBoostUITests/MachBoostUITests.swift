@@ -15,6 +15,18 @@ final class MachBoostUITests: XCTestCase {
     }
 
     @MainActor
+    func testModelsLibraryHasDedicatedOnlineTab() {
+        let app = launchApp()
+        XCTAssertTrue(app.staticTexts["Models"].waitForExistence(timeout: 10))
+        app.staticTexts["Models"].click()
+        let online = app.radioButtons["Online"]
+        XCTAssertTrue(online.waitForExistence(timeout: 5))
+        online.click()
+        XCTAssertTrue(app.staticTexts["No online models"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Catalog"].exists)
+    }
+
+    @MainActor
     func testPrimaryWorkspaceAndNavigationAreReachable() {
         let app = launchApp()
         XCTAssertTrue(app.staticTexts["MachBoost"].waitForExistence(timeout: 10))
