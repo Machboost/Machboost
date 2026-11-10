@@ -66,6 +66,7 @@ final class AppState {
     private(set) var providers: [ProviderSummary] = []
     private(set) var isRefreshingProviders = false
     private(set) var providerError: String?
+    private var providerRefreshPending = false
     private(set) var mcpServers: [MCPServerSummary] = []
     private(set) var skills: [SkillSummary] = []
     private(set) var lastCreatedTeamToken: String?
@@ -462,9 +463,19 @@ final class AppState {
     }
 
     func refreshProviders() async {
-        guard serverIsRunning, !isRefreshingProviders else { return }
+        guard serverIsRunning else { return }
+        if isRefreshingProviders {
+            providerRefreshPending = true
+            return
+        }
         isRefreshingProviders = true
-        defer { isRefreshingProviders = false }
+        defer {
+            isRefreshingProviders = false
+            if providerRefreshPending {
+                providerRefreshPending = false
+                Task { await refreshProviders() }
+            }
+        }
         do {
             providers = try await api.providers()
             if !usesUITestAPI {
