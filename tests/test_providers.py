@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import io
 import json
 import threading
@@ -114,6 +115,72 @@ class ProviderStoreTests(unittest.TestCase):
         self.assertTrue(self.store.delete("primary"))
         self.assertFalse(self.store.delete("primary"))
         self.assertEqual(self.store.list(), [])
+
+    def test_unconfigured_prices_are_unknown_not_free(self):
+        self.configure(input_cost_per_million=0, output_cost_per_million=0)
+        result = self.store.chat({"model": "qwen-coder", "messages": []})
+        listed = self.store.list()[0]
+        self.assertFalse(result.cost_estimate_known)
+        self.assertIsNone(listed["estimated_cost_at_current_rates_usd"])
+        self.assertEqual(listed["requests_this_month"], 1)
+        self.assertEqual(listed["prompt_tokens_this_month"], 100)
+        self.assertEqual(listed["completion_tokens_this_month"], 25)
+
+    def test_per_model_prices_recompute_historical_estimates_without_changing_recorded_cost(self):
+        self.configure(input_cost_per_million=0, output_cost_per_million=0)
+        self.store.chat({"model": "qwen-coder", "messages": []})
+        self.store.set_pricing("primary", "qwen-coder", 2, 8)
+        listed = self.store.list()[0]
+        self.assertAlmostEqual(listed["estimated_cost_at_current_rates_usd"], 0.0004)
+        self.assertEqual(listed["spent_this_month_usd"], 0)
+        self.assertEqual(listed["unpriced_requests"], 1)
+        self.store.set_pricing("primary", "fallback-model", 10, 20)
+        result = self.store.chat({"model": "fallback-model", "messages": []})
+        self.assertTrue(result.cost_estimate_known)
+        self.assertAlmostEqual(result.cost_usd, 0.0015)
+        self.assertAlmostEqual(self.store.list()[0]["estimated_cost_at_current_rates_usd"], 0.0019)
+
+    def test_explicit_free_prices_are_different_from_unknown_and_survive_restart(self):
+        self.configure(input_cost_per_million=0, output_cost_per_million=0)
+        self.store.set_pricing("primary", "qwen-coder", 0, 0)
+        result = self.store.chat({"model": "qwen-coder", "messages": []})
+        self.assertTrue(result.cost_estimate_known)
+        self.assertEqual(self.store.list()[0]["estimated_cost_at_current_rates_usd"], 0)
+        second = ProviderStore(self.store.path, clock=self.store.clock)
+        try:
+            self.assertEqual(second.list()[0]["estimated_cost_at_current_rates_usd"], 0)
+        finally:
+            second.close()
+
+    def test_pricing_rejects_negative_and_non_finite_values(self):
+        self.configure()
+        for rate in (-1, float("nan"), float("inf")):
+            with self.subTest(rate=rate), self.assertRaises(ValueError):
+                self.store.set_pricing("primary", "qwen-coder", rate, 1)
+
+    def test_missing_usage_is_not_reported_as_zero_cost(self):
+        self.configure()
+        self.store.transport = lambda *args: {"choices": [{"message": {"content": "ok"}}]}
+        result = self.store.chat({"model": "qwen-coder", "messages": []})
+        self.assertFalse(result.cost_estimate_known)
+        listed = self.store.list()[0]
+        self.assertEqual(listed["missing_usage_requests"], 1)
+        self.assertIsNone(listed["estimated_cost_at_current_rates_usd"])
+
+    def test_legacy_usage_migration_preserves_tokens_and_marks_zero_cost_unknown(self):
+        self.configure(input_cost_per_million=0, output_cost_per_million=0)
+        self.store.chat({"model": "qwen-coder", "messages": []})
+        path, clock = self.store.path, self.store.clock
+        self.store.close()
+        with sqlite3.connect(path) as connection:
+            connection.execute("ALTER TABLE provider_usage DROP COLUMN unpriced_requests")
+            connection.execute("ALTER TABLE provider_usage DROP COLUMN missing_usage_requests")
+        self.store = ProviderStore(path, clock=clock)
+        listed = self.store.list()[0]
+        self.assertEqual(listed["prompt_tokens_this_month"], 100)
+        self.assertEqual(listed["completion_tokens_this_month"], 25)
+        self.assertEqual(listed["unpriced_requests"], 1)
+        self.assertIsNone(listed["estimated_cost_at_current_rates_usd"])
 
 
 class ProviderTransportTests(unittest.TestCase):
@@ -232,7 +299,8 @@ class ProviderStreamingTests(unittest.TestCase):
         self.store.stream_transport = lambda *args: iter([self.packet({"content": "partial"})])
         with self.assertRaisesRegex(ProviderError, "completion marker"):
             self.store.stream_chat({"model": "test"}, on_chunk=lambda packet: None)
-        self.assertEqual(self.store.usage()["usage"], [])
+        self.assertEqual(self.store.list()[0]["missing_usage_requests"], 1)
+        self.assertIsNone(self.store.list()[0]["estimated_cost_at_current_rates_usd"])
 
     def test_sse_parser_handles_comments_multiline_unicode_and_done(self):
         wire = '\ufeff: heartbeat\r\ndata: {"choices": [],\r\ndata: "label": "caf\u00e9"}\r\n\r\ndata: [DONE]\n\n'
