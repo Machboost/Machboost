@@ -923,9 +923,17 @@ response. This is a delivery/resilience feature, not a local-inference speedup.
 
 In the macOS app, add a provider under **Server > Memory & fallback**. Both
 `https://api.example.com` and `https://api.example.com/v1` are accepted as base
-URLs. Its explicit model names appear in the chat picker's **Paid API** section,
+URLs. Its explicit model names appear in the chat picker's **Online** tab,
 including when local/API fallback is selected. Models configured only as `*`
 remain available through the route menu's same-model-name option.
+
+Provider usage displays reported input/output tokens and request counts for the
+current UTC month. Use the pricing button in **Server > Memory & fallback** to
+set separate USD-per-million input/output rates for each model. Costs are
+estimates at those current rates, not provider invoices; discounts, cached-token
+pricing, and taxes can differ. Missing prices or incomplete usage display
+**Cost unknown**, not a zero-dollar claim. Historical token counts can be
+re-estimated after prices are entered without rewriting recorded historical cost.
 
 ```sh
 machboost run qwen2.5:7b \
