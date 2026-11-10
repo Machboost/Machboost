@@ -377,6 +377,16 @@ prices, and estimated USD cost. The check prevents new calls once recorded spend
 reaches the monthly cap; it is not a prepaid billing guarantee for concurrent
 in-flight requests.
 
+`POST /api/providers/pricing` is administrator-only and sets
+`provider_id`, `model`, `input_cost_per_million`, and `output_cost_per_million`.
+Rates must be finite and nonnegative. Explicit zero prices mean free; missing
+prices mean unknown. `GET /api/providers` includes per-model usage, incomplete
+usage counters, and `estimated_cost_at_current_rates_usd`. A null estimate must
+not be presented as zero spending. Estimates recalculate historical token counts
+at current rates; they are not provider billing data and exclude provider-specific
+discounts and taxes. The legacy `spent_this_month_usd` field remains the recorded
+estimate at request-time rates, not an invoice total.
+
 External streaming requests use upstream Chat Completions SSE rather than a
 buffered completion. `/v1/chat/completions` forwards incremental text, reasoning,
 and indexed tool-call argument fragments. `/api/chat` emits text and reasoning
