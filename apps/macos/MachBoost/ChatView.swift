@@ -359,12 +359,15 @@ struct ChatView: View {
                     accessibilityIdentifier: "model-search-field"
                 )
                 .frame(height: 30)
-                if isSearchingHub {
+                if isSearchingHub || (modelFilter == .online && appState.isRefreshingProviders) {
                     ProgressView()
                         .controlSize(.small)
                 } else {
                     Button {
-                        Task { await appState.refreshAll() }
+                        Task {
+                            await appState.refreshProviders()
+                            if modelFilter != .online { await appState.refreshAll() }
+                        }
                         scheduleHubSearch(modelSearch)
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -388,8 +391,19 @@ struct ChatView: View {
             Divider()
 
             if browsableModels.isEmpty && browsablePaidModels.isEmpty {
-                ContentUnavailableView.search(text: modelSearch)
+                if modelFilter == .online {
+                    ContentUnavailableView {
+                        Label(appState.isRefreshingProviders ? "Loading online models" : "No online models", systemImage: "cloud")
+                    } description: {
+                        Text(appState.providerError ?? (modelSearch.isEmpty ? "No configured provider models." : "No matching online models."))
+                    } actions: {
+                        Button("Refresh") { Task { await appState.refreshProviders() } }
+                    }
                     .frame(maxWidth: .infinity, minHeight: 260)
+                } else {
+                    ContentUnavailableView.search(text: modelSearch)
+                        .frame(maxWidth: .infinity, minHeight: 260)
+                }
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
@@ -421,13 +435,13 @@ struct ChatView: View {
             Divider()
             HStack {
                 Label(
-                    "\(browsableModels.filter(\.cached).count) ready on \(appState.inferenceLabel)",
-                    systemImage: "checkmark.circle"
+                    modelFilter == .online ? "\(browsablePaidModels.count) online models" : "\(browsableModels.filter(\.cached).count) ready on \(appState.inferenceLabel)",
+                    systemImage: modelFilter == .online ? "cloud" : "checkmark.circle"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 Spacer()
-                Text(hubModels.isEmpty ? "MLX" : "Hugging Face")
+                Text(modelFilter == .online ? "API providers" : (hubModels.isEmpty ? "MLX" : "Hugging Face"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.green)
             }
@@ -436,6 +450,19 @@ struct ChatView: View {
         }
         .frame(width: 480, height: 520)
         .background(AppStyle.canvas)
+        .task {
+            if routeMode == .externalOnly || routeMode == .externalFirst { modelFilter = .online }
+            await appState.refreshProviders()
+        }
+        .onChange(of: modelFilter) { _, value in
+            if value == .online {
+                hubSearchTask?.cancel()
+                hubModels = []
+                isSearchingHub = false
+                modelSearch = ""
+                Task { await appState.refreshProviders() }
+            }
+        }
     }
 
     private var showsPaidModelSelection: Bool {
@@ -443,10 +470,10 @@ struct ChatView: View {
     }
 
     private var browsablePaidModels: [PaidModelChoice] {
-        guard modelFilter == .all || modelFilter == .ready else { return [] }
-        return availableProviders.flatMap { provider in
+        guard modelFilter == .all || modelFilter == .ready || modelFilter == .online else { return [] }
+        return appState.providers.filter(\.enabled).flatMap { provider in
             provider.models.filter { $0 != "*" }.map {
-                PaidModelChoice(providerID: provider.id, providerName: provider.name, model: $0)
+                PaidModelChoice(providerID: provider.id, providerName: provider.name, model: $0, hasSecret: provider.hasSecret)
             }
         }.filter { $0.matches(modelSearch) }
     }
@@ -467,7 +494,11 @@ struct ChatView: View {
                     Text(choice.providerName).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                if showsPaidModelSelection,
+                if !choice.hasSecret {
+                    Label("API key required", systemImage: "key")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if showsPaidModelSelection,
                    providerID == choice.providerID, effectiveProviderModel == choice.model {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(AppStyle.accent)
                 }
@@ -476,6 +507,7 @@ struct ChatView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(AppRowButtonStyle())
+        .disabled(!choice.hasSecret)
         .accessibilityIdentifier("paid-model-\(choice.model)")
     }
 
@@ -1326,6 +1358,8 @@ struct ChatView: View {
                     || (model.repository?.lowercased().contains(query) ?? false)
                 guard matchesSearch else { return false }
                 switch modelFilter {
+                case .online:
+                    return false
                 case .all:
                     return true
                 case .ready:
@@ -1351,7 +1385,7 @@ struct ChatView: View {
     private func scheduleHubSearch(_ value: String) {
         hubSearchTask?.cancel()
         let query = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2, appState.inferenceMode == .local else {
+        guard modelFilter != .online, query.count >= 2, appState.inferenceMode == .local else {
             hubModels = []
             isSearchingHub = false
             return
@@ -2560,6 +2594,7 @@ struct PaidModelChoice: Identifiable {
     let providerID: String
     let providerName: String
     let model: String
+    var hasSecret: Bool = true
 
     var id: String { "\(providerID):\(model)" }
 
@@ -2573,6 +2608,7 @@ struct PaidModelChoice: Identifiable {
 
 private enum ModelBrowserFilter: String, CaseIterable, Identifiable {
     case all
+    case online
     case ready
     case loaded
     case vision
@@ -2583,6 +2619,7 @@ private enum ModelBrowserFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "All"
+        case .online: "Online"
         case .ready: "Ready"
         case .loaded: "Loaded"
         case .vision: "Vision"
@@ -2593,6 +2630,7 @@ private enum ModelBrowserFilter: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .all: "square.grid.2x2"
+        case .online: "cloud"
         case .ready: "checkmark.circle"
         case .loaded: "memorychip"
         case .vision: "eye"
