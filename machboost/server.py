@@ -2252,7 +2252,8 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
             **machboost_context_result(workspace, memory_context), "backend": "external",
             "time_to_first_token_seconds": external.time_to_first_token_seconds,
             "route": {"source": "external", "provider_id": external.provider_id,
-                      "latency_seconds": external.latency_seconds, "cost_usd": external.cost_usd,
+                      "latency_seconds": external.latency_seconds,
+                      "cost_usd": external.cost_usd if external.cost_estimate_known else None,
                       "buffered_upstream": not external.streamed},
         }
         start()
@@ -2798,6 +2799,18 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                 self.providers.set_secret(provider_id, payload.get("api_key"))
                 self.send_json({"provider_id": provider_id, "has_secret": bool(payload.get("api_key"))})
                 return
+            if path == "/api/providers/pricing":
+                if not self.require_team_admin():
+                    return
+                provider_id = required_string(payload, "provider_id")
+                self.providers.set_pricing(
+                    provider_id, required_string(payload, "model"),
+                    float(payload["input_cost_per_million"]),
+                    float(payload["output_cost_per_million"]),
+                )
+                listed = next(item for item in self.providers.list() if item["id"] == provider_id)
+                self.send_json({"schema": "machboost.provider.v1", "provider": listed})
+                return
             if path == "/api/providers/delete":
                 if not self.require_team_admin():
                     return
@@ -3288,7 +3301,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                         "source": "external",
                         "provider_id": external.provider_id,
                         "latency_seconds": external.latency_seconds,
-                        "cost_usd": external.cost_usd,
+                        "cost_usd": external.cost_usd if external.cost_estimate_known else None,
                         "buffered_upstream": True,
                     },
                 },
@@ -4568,7 +4581,7 @@ class MachBoostRequestHandler(BaseHTTPRequestHandler):
                             "source": "external",
                             "provider_id": external.provider_id,
                             "latency_seconds": external.latency_seconds,
-                            "cost_usd": external.cost_usd,
+                            "cost_usd": external.cost_usd if external.cost_estimate_known else None,
                         },
                     }
                 )
