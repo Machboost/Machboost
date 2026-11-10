@@ -314,6 +314,18 @@ public struct ProviderSummary: Codable, Identifiable, Hashable, Sendable {
     public let monthlyBudgetUSD: Double?
     public let spentThisMonthUSD: Double
     public let remainingBudgetUSD: Double?
+    public let requestsThisMonth: Int?
+    public let promptTokensThisMonth: Int?
+    public let completionTokensThisMonth: Int?
+    public let missingUsageRequests: Int?
+    public let estimatedCostAtCurrentRatesUSD: Double?
+    public let modelUsage: [ProviderModelUsage]?
+
+    public var costEstimateLabel: String {
+        guard let cost = estimatedCostAtCurrentRatesUSD else { return "Cost unknown" }
+        let digits = cost > 0 && cost < 0.0001 ? 8 : 4
+        return "\(cost.formatted(.currency(code: "USD").precision(.fractionLength(digits)))) estimated at current prices"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, models, enabled
@@ -322,6 +334,35 @@ public struct ProviderSummary: Codable, Identifiable, Hashable, Sendable {
         case monthlyBudgetUSD = "monthly_budget_usd"
         case spentThisMonthUSD = "spent_this_month_usd"
         case remainingBudgetUSD = "remaining_budget_usd"
+        case requestsThisMonth = "requests_this_month"
+        case promptTokensThisMonth = "prompt_tokens_this_month"
+        case completionTokensThisMonth = "completion_tokens_this_month"
+        case missingUsageRequests = "missing_usage_requests"
+        case estimatedCostAtCurrentRatesUSD = "estimated_cost_at_current_rates_usd"
+        case modelUsage = "model_usage"
+    }
+}
+
+public struct ProviderModelUsage: Codable, Hashable, Sendable {
+    public let model: String
+    public let pricingConfigured: Bool
+    public let inputCostPerMillion: Double?
+    public let outputCostPerMillion: Double?
+    public let requests: Int
+    public let promptTokens: Int
+    public let completionTokens: Int
+    public let missingUsageRequests: Int
+    public let estimatedCostAtCurrentRatesUSD: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case model, requests
+        case pricingConfigured = "pricing_configured"
+        case inputCostPerMillion = "input_cost_per_million"
+        case outputCostPerMillion = "output_cost_per_million"
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+        case missingUsageRequests = "missing_usage_requests"
+        case estimatedCostAtCurrentRatesUSD = "estimated_cost_at_current_rates_usd"
     }
 }
 
